@@ -1,0 +1,2170 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>広告キャンペーン作成トレーナー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* =========================================================
+     共通（トークンはテーマごとに上書き）
+     ========================================================= */
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f1f3f4;
+    --text: #202124;
+    --muted: #5f6368;
+    --border: #dadce0;
+    --accent: #1a73e8;
+    --accent-hover: #1765cc;
+    --accent-soft: #e8f0fe;
+    --accent-text: #ffffff;
+    --good: #188038; --good-soft: #e6f4ea;
+    --ok: #b06000;   --ok-soft: #fef7e0;
+    --bad: #d93025;  --bad-soft: #fce8e6;
+    --radius: 8px;
+    --btn-radius: 4px;
+    --nav-h: 68px;
+    --font: Roboto, "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.7; }
+  body.has-nav { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); }
+  body.modal-open { overflow: hidden; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 840px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---------- header ---------- */
+  .app-header { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .app-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 54px; max-width: 1320px; }
+  .brand { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; font-size: 18px; color: var(--muted); min-width: 0; text-align: left; }
+  .brand-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: grid; place-items: center; font-size: 12px; font-weight: 500; flex: none; }
+  .header-right { display: flex; align-items: center; gap: 6px; flex: none; }
+  .practice-chip { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px dashed var(--muted); color: var(--muted); white-space: nowrap; }
+  .mode-badge { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: var(--surface-2); color: var(--muted); font-weight: 500; white-space: nowrap; }
+
+  /* ---------- title bar ---------- */
+  .titlebar { border-bottom: 1px solid var(--border); background: var(--surface); }
+  .titlebar .wrap { display: flex; align-items: center; gap: 12px; height: 56px; max-width: 1320px; }
+  .tb-close { width: 40px; height: 40px; border-radius: 50%; border: 0; background: none; color: var(--muted); font-size: 22px; flex: none; }
+  .tb-close:hover { background: var(--surface-2); }
+  .tb-title { font-size: 18px; display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+  .tb-title small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---------- progress stepper (Google) ---------- */
+  .stepper-bar { position: sticky; top: 54px; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--border); }
+  #stepper { display: flex; overflow-x: auto; padding: 14px 16px 12px; max-width: 1000px; margin: 0 auto; justify-content: safe center; scrollbar-width: none; }
+  #stepper::-webkit-scrollbar { display: none; }
+  .step-chip {
+    position: relative; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    border: 0; background: none; padding: 0 4px; width: 92px; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.35;
+  }
+  .step-chip:not(:first-child)::before { content: ""; position: absolute; top: 12px; right: calc(50% + 16px); width: calc(100% - 32px); height: 1px; background: var(--border); }
+  .step-chip.done::before, .step-chip.active::before { background: var(--accent); }
+  .step-chip .num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--muted); font-size: 12px; font-weight: 500; }
+  .step-chip.done .num { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .step-chip.active { color: var(--text); font-weight: 500; }
+  .step-chip.active .num { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 4px var(--accent-soft); }
+
+  /* ---------- wizard layout ---------- */
+  .wiz-layout { max-width: 840px; margin: 0 auto; padding: 8px 16px 0; }
+  .tree, .side { display: none; }
+
+  /* ---------- home ---------- */
+  .platform-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 24px 0 0; }
+  .pf-btn {
+    display: flex; align-items: center; gap: 12px; text-align: left; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  }
+  .pf-btn:hover { border-color: var(--accent); }
+  .pf-btn.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+  .pf-icon { font-size: 26px; line-height: 1; }
+  .pf-btn strong { display: block; font-size: 15px; font-weight: 500; }
+  .pf-btn small { color: var(--muted); font-size: 12px; }
+  .hero { padding: 28px 0 4px; }
+  .hero h1 { font-size: 26px; font-weight: 400; line-height: 1.45; margin: 0 0 12px; }
+  .hero p { color: var(--muted); margin: 0 0 16px; }
+  .flow { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; counter-reset: flow; }
+  .flow li { counter-increment: flow; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 99px; padding: 2px 10px; }
+  .flow li::before { content: counter(flow) ". "; color: var(--accent); font-weight: 700; }
+  .flow-groups { display: grid; gap: 8px; }
+  .flow-group { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .flow-lv { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 72px; }
+  .sec-title { font-size: 16px; font-weight: 500; margin: 32px 0 12px; }
+  .sec-title small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+  .mode-card, .sc-card {
+    display: flex; width: 100%; text-align: left; gap: 14px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; transition: border-color .15s, box-shadow .15s;
+  }
+  .mode-card:hover, .sc-card:hover { border-color: var(--accent); box-shadow: 0 1px 3px rgba(60, 64, 67, .15); }
+  .mode-icon { font-size: 28px; }
+  .mode-card strong { display: block; font-size: 15px; font-weight: 500; }
+  .mode-card small, .sc-card small { color: var(--muted); font-size: 13px; }
+  .scenario-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .sc-card { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .sc-card strong { font-size: 14px; font-weight: 500; line-height: 1.5; }
+  .sc-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .sc-icon { font-size: 22px; }
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+  .tag-type { background: var(--text); color: var(--surface); }
+  .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+  .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 99px; padding: 4px 12px; font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  .chip span { font-size: 11px; background: var(--surface-2); border-radius: 99px; padding: 0 6px; }
+  .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 500; }
+  .tag-level { background: var(--surface-2); color: var(--muted); }
+  .tag-warn { background: var(--bad-soft); color: var(--bad); }
+  .note { font-size: 12px; color: var(--muted); margin: 28px 0 40px; }
+  .i-inline { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--muted); color: var(--muted); font-size: 11px; font-weight: 700; font-style: italic; font-family: Georgia, serif; vertical-align: 1px; }
+
+  /* ---------- brief / info ---------- */
+  .brief, .free-note { border-radius: var(--radius); background: var(--accent-soft); margin: 16px 0 0; }
+  .free-note { font-size: 13px; padding: 12px 16px; }
+  .brief summary { display: flex; gap: 10px; align-items: center; padding: 12px 16px; cursor: pointer; list-style: none; }
+  .brief summary::-webkit-details-marker { display: none; }
+  .brief summary::after { content: "▾"; margin-left: auto; color: var(--muted); transition: transform .2s; }
+  .brief[open] summary::after { transform: rotate(180deg); }
+  .brief summary small { display: block; color: var(--muted); font-size: 12px; }
+  .brief summary strong { font-size: 14px; line-height: 1.5; display: block; font-weight: 500; }
+  .brief dl { margin: 0; padding: 0 16px 6px; display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; font-size: 14px; }
+  .brief dt { color: var(--muted); font-size: 13px; }
+  .brief dd { margin: 0; }
+  .hint-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 8px 16px 12px; border-top: 1px dashed rgba(0, 0, 0, .12); margin-top: 6px; }
+
+  /* ---------- step & fields ---------- */
+  .step-head { padding: 28px 0 8px; }
+  .step-count { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .02em; }
+  .step-head h2 { margin: 4px 0 8px; font-size: 24px; font-weight: 400; }
+  .lead { margin: 0; color: var(--muted); font-size: 14px; }
+  .level-banner { display: none; }
+  .field { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin: 20px 0; }
+  .field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .field-head h3 { margin: 0; font-size: 16px; font-weight: 500; }
+  .field-summary { margin: 4px 0 18px; font-size: 13px; color: var(--muted); }
+  .i-btn {
+    flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--muted); background: var(--surface); color: var(--muted);
+    font-weight: 700; font-style: italic; font-family: Georgia, serif; font-size: 13px; line-height: 1; padding: 0;
+  }
+  .i-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  .opts { display: grid; gap: 8px; }
+  .opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; cursor: pointer; background: var(--surface); transition: border-color .15s, background .15s; }
+  .opt:hover { border-color: var(--accent); }
+  .opt input { margin: 4px 0 0; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+  .opt:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+  .opt-main { display: flex; flex-direction: column; min-width: 0; }
+  .opt-label { font-weight: 500; font-size: 14px; }
+  .opt-desc { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .opts.multi { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+  /* tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer; background: var(--surface); transition: border-color .15s, background .15s; }
+  .tile input { position: absolute; opacity: 0; pointer-events: none; }
+  .tile:hover { border-color: var(--accent); }
+  .tile:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tile:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+  .tile-icon { color: var(--muted); line-height: 0; }
+  .tile:has(input:checked) .tile-icon { color: var(--accent); }
+  .tile-label { font-weight: 500; font-size: 14px; line-height: 1.5; }
+  .tile-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .tile-check { position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; display: none; place-items: center; }
+  .tile:has(input:checked) .tile-check { display: grid; }
+
+  /* guide */
+  .guide-card { border-color: var(--accent); }
+  .prep-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .prep-list li { display: flex; align-items: center; gap: 10px; justify-content: space-between; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+  .prep-list li .btn-ghost { flex: none; white-space: nowrap; }
+  .prep-list label { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+  .prep-list input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); flex: none; }
+  .prep-list li:has(input:checked) span { color: var(--muted); text-decoration: line-through; }
+  .guide-toc { margin: 18px 0 4px; }
+  .guide-title { font-size: 20px; margin: 4px 0 6px; }
+  .guide-summary { font-size: 15px; font-weight: 500; margin: 0 0 6px; }
+  .guide-sec h3 { font-size: 14px; margin: 18px 0 4px; }
+  .guide-sec p { margin: 0; font-size: 14px; }
+  .guide-steps { margin: 0; padding-left: 1.4em; font-size: 14px; } .guide-steps li { margin: 4px 0; }
+  .guide-sec .tip ul { margin: 4px 0 0; padding-left: 1.2em; } .guide-sec .tip li { margin: 3px 0; }
+
+  /* advanced */
+  .adv-tag { display: inline-block; font-size: 11px; font-weight: 700; line-height: 1.6; padding: 0 7px; border-radius: 4px; background: #fff1d6; color: #8a5a00; vertical-align: 2px; margin-left: 4px; letter-spacing: .02em; }
+  .adv-box { margin: 22px 0; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface); }
+  .adv-box > summary { cursor: pointer; padding: 14px 16px; font-weight: 600; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .adv-box > summary .adv-tag { margin-left: 0; }
+  .adv-box > summary small { width: 100%; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .adv-box[open] { padding: 0 12px 4px; }
+  .adv-box[open] > summary { padding: 14px 4px; }
+  .adv-default { font-size: 12px; color: #8a5a00; background: #fff8e8; border-radius: 6px; padding: 4px 10px; margin: -8px 0 14px; width: fit-content; }
+  .adv-note { font-size: 13px; background: #fff8e8; border-radius: 6px; padding: 6px 10px; margin: 6px 0 0 !important; }
+  .review-list dd.na { color: var(--muted); font-weight: 400; }
+
+  /* type cards */
+  .typecards { display: grid; gap: 10px; }
+  .typecard { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); transition: border-color .15s, background .15s; }
+  .typecard:hover { border-color: var(--accent); }
+  .typecard.on, .typecard:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+  .tc-main { position: relative; display: flex; gap: 14px; align-items: flex-start; padding: 14px 44px 10px 16px; cursor: pointer; }
+  .tc-main input { position: absolute; opacity: 0; pointer-events: none; }
+  .tc-main:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
+  .tc-icon { color: var(--muted); line-height: 0; flex: none; margin-top: 2px; }
+  .typecard:has(input:checked) .tc-icon { color: var(--accent); }
+  .tc-text { display: flex; flex-direction: column; min-width: 0; }
+  .tc-label { font-weight: 500; font-size: 15px; }
+  .tc-desc { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .typecard:has(input:checked) .tile-check { display: grid; }
+  .tc-guide { margin: 0 16px 12px 58px; font-size: 13px; }
+  .tc-guide summary { cursor: pointer; color: var(--accent); font-weight: 500; width: fit-content; }
+  .tc-guide dl { margin: 8px 0 0; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .tc-guide dt { font-weight: 500; margin-top: 6px; }
+  .tc-guide dt:first-child { margin-top: 0; }
+  .tc-guide dd { margin: 2px 0 0; color: var(--muted); }
+  .type-locked { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
+
+  /* keywords */
+  .kw-context { font-size: 13px; background: var(--surface-2); border-radius: var(--radius); padding: 8px 12px; margin: 0 0 12px; }
+  .kw-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .kw-row { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .kw-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .kw-text { font-weight: 500; font-size: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--btn-radius); overflow: hidden; }
+  .seg-btn { border: 0; background: var(--surface); padding: 6px 12px; font-size: 13px; color: var(--muted); min-width: 64px; }
+  .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+  .seg-btn.on.seg-add { background: var(--good-soft); color: var(--good); font-weight: 500; }
+  .seg-btn.on.seg-negative { background: var(--bad-soft); color: var(--bad); font-weight: 500; }
+  .seg-btn.on.seg-skip { background: var(--surface-2); color: var(--text); font-weight: 500; }
+  .kw-fb { margin: 8px 0 0; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
+  .kw-fb.good { background: var(--good-soft); } .kw-fb.ok { background: var(--ok-soft); } .kw-fb.bad { background: var(--bad-soft); }
+  .ckw { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--border); }
+  .ckw h4 { margin: 0 0 8px; font-size: 14px; font-weight: 500; }
+  .ckw h4 small { color: var(--muted); font-weight: 400; }
+  .ckw-form { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ckw-form input { flex: 1 1 180px; }
+  .ckw-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+  .ckw-list li { display: flex; gap: 10px; align-items: center; font-size: 13px; background: var(--surface-2); border-radius: var(--radius); padding: 6px 10px; }
+  .ckw-list code { font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .ckw-list span { color: var(--muted); flex: 1; }
+
+  input[type=text], input[type=number], select { border: 1px solid var(--border); background: var(--surface); border-radius: var(--btn-radius); padding: 9px 10px; font-size: 16px; min-width: 0; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+  /* textlist */
+  .lines { display: grid; gap: 8px; }
+  .line { display: flex; align-items: center; gap: 8px; }
+  .line-no { width: 20px; text-align: right; color: var(--muted); font-size: 12px; flex: none; }
+  .line input { flex: 1; }
+  .cc { font-size: 12px; color: var(--muted); width: 54px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+  .cc.over { color: var(--bad); font-weight: 700; }
+  .cc.soft-over { color: var(--ok); font-weight: 700; }
+  .x { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 0; background: transparent; color: var(--muted); font-size: 16px; }
+  .x:hover { background: var(--surface-2); }
+  .lines-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .count-info { font-size: 13px; color: var(--muted); }
+  .count-info .warn { color: var(--bad); }
+  .count-info .soft { color: var(--ok); }
+
+  /* number */
+  .num-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .num-wrap input { width: 180px; font-size: 20px; font-weight: 500; }
+  .unit { color: var(--muted); }
+  .num-help { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+
+  /* Google search preview */
+  .serp { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; background: var(--surface); }
+  .serp-sp { font-size: 12px; font-weight: 700; }
+  .serp-url { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0 4px; }
+  .fav { width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .serp-h { color: #1a0dab; font-size: 18px; line-height: 1.4; word-break: break-all; }
+  .serp-d { font-size: 13px; color: #4d5156; margin-top: 4px; word-break: break-all; }
+  .serp-ext { font-size: 13px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .serp-ext .link { color: #1a0dab; }
+  /* pmax preview */
+  .pm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .pm-tile { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 12px; }
+  .pm-tile.full { grid-column: 1 / -1; }
+  .pm-tile > p { margin: 0 0 6px; font-weight: 500; color: var(--muted); font-size: 11px; }
+  .pm-search b { font-size: 11px; display: block; } .pm-search span { color: var(--muted); display: block; } .pm-search em { font-style: normal; color: #1a0dab; font-size: 14px; }
+  .pm-yt { aspect-ratio: 16 / 9; background: #1f2229; color: #fff; border-radius: 6px; display: grid; place-items: center; text-align: center; font-size: 13px; }
+  .pm-yt.auto { background: repeating-linear-gradient(45deg, #3a3f4b, #3a3f4b 8px, #343842 8px, #343842 16px); }
+  .pm-yt small { display: block; font-size: 10px; opacity: .8; }
+  .pm-disp { display: flex; gap: 8px; align-items: center; }
+  .pm-disp b { display: block; font-size: 12px; font-weight: 500; line-height: 1.4; }
+  .pm-disp small { color: var(--muted); }
+  .pm-img { flex: none; width: 64px; height: 64px; border-radius: 6px; background: linear-gradient(135deg, #d7e3f7, #a9c1ea); display: grid; place-items: center; color: #3b5a8c; font-size: 11px; }
+  .pm-img.none { background: var(--surface-2); color: var(--muted); }
+  .pm-shop .pm-img { width: 100%; height: 70px; margin-bottom: 4px; }
+  .pm-shop b { display: block; font-weight: 500; } .pm-shop span { font-weight: 700; }
+
+  /* app preview */
+  .ap-card { display: flex; gap: 8px; align-items: flex-start; }
+  .ap-card > div { flex: 1; min-width: 0; }
+  .ap-card b { display: block; font-weight: 500; font-size: 13px; }
+  .ap-card small { color: var(--muted); font-size: 11px; }
+  .ap-card p { margin: 4px 0 0; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .ap-icon { flex: none; width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #34a853, #188038); color: #fff; display: grid; place-items: center; font-weight: 700; }
+  .ap-btn { flex: none; background: #188038; color: #fff; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 500; }
+
+  /* shopping preview */
+  .sh-label { margin: 0 0 6px; font-size: 12px; font-weight: 700; }
+  .sh-row { display: flex; gap: 10px; overflow-x: auto; }
+  .sh-card { flex: 0 0 160px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-size: 12px; }
+  .sh-card.mine { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .sh-img { position: relative; aspect-ratio: 1 / 1; background: #f8f9fa; border-radius: 6px; display: grid; place-items: center; color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+  .sh-img.other { background: var(--surface-2); }
+  .sh-wm { position: absolute; top: 6px; left: 6px; background: #d93025; color: #fff; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+  .sh-card b { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-weight: 400; color: #1a0dab; line-height: 1.4; }
+  .sh-price { display: block; font-weight: 700; margin-top: 4px; }
+  .sh-card small { color: var(--muted); }
+
+  /* demand gen preview */
+  .dg-wrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .dg-place { margin: 0 0 6px; font-size: 11px; color: var(--muted); font-weight: 500; }
+  .dg-feed { flex: 1 1 280px; max-width: 360px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; padding: 10px; }
+  .dg-img { background: linear-gradient(135deg, #b8e0c8, #5aa77d); color: #fff; display: grid; place-items: center; font-size: 12px; aspect-ratio: 1.91 / 1; border-radius: 8px; }
+  .dg-img.video { background: linear-gradient(135deg, #3a3f4b, #15171c); }
+  .dg-car { display: flex; gap: 6px; overflow: hidden; }
+  .dg-card { flex: 0 0 62%; font-size: 12px; } .dg-card .dg-img { aspect-ratio: 1 / 1; } .dg-card b { display: block; font-weight: 500; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dg-prod { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; font-size: 11px; } .dg-prod .dg-img { aspect-ratio: 1 / 1; display: grid; }
+  .dg-text { padding: 8px 2px 0; } .dg-text b { display: block; font-weight: 500; font-size: 14px; } .dg-text small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .dg-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .dg-phone { position: relative; width: 150px; aspect-ratio: 9 / 16; border-radius: 12px; overflow: hidden; }
+  .dg-phone .dg-img { aspect-ratio: auto; border-radius: 0; }
+  .dg-sbottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px; color: #fff; font-size: 11px; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+  .dg-sbottom b { display: block; font-weight: 500; margin-bottom: 6px; }
+
+  /* display preview */
+  .dp-wrap { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .dp-banner { flex: 1 1 300px; max-width: 420px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .dp-small { width: 170px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font-size: 12px; }
+  .dp-small > b { display: block; padding: 6px 8px 0; font-weight: 500; line-height: 1.4; }
+  .dp-img { background: linear-gradient(135deg, #f5c36b, #d9603b); color: #fff; display: grid; place-items: center; font-size: 12px; }
+  .dp-img.wide { aspect-ratio: 1.91 / 1; } .dp-img.sq { aspect-ratio: 1 / 1; }
+  .dp-img.none { background: var(--surface-2); color: var(--muted); }
+  .dp-img.texty { display: flex; flex-direction: column; justify-content: center; gap: 2px; font-size: 9px; font-weight: 700; }
+  .dp-body { padding: 8px 10px; } .dp-body b { font-weight: 500; font-size: 14px; line-height: 1.45; display: block; }
+  .dp-foot { display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: var(--muted); }
+  .dp-body .dp-foot { padding: 6px 0 0; }
+  .dp-go { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 16px; }
+
+  /* video preview */
+  .yt { max-width: 520px; }
+  .yt-screen { position: relative; aspect-ratio: 16 / 9; background: linear-gradient(135deg, #2b2f3a, #11131a); border-radius: 10px; overflow: hidden; display: grid; place-items: center; color: #fff; }
+  .yt-center { font-size: 18px; font-weight: 500; text-align: center; line-height: 1.4; }
+  .yt-center small { display: block; font-size: 12px; opacity: .7; font-weight: 400; }
+  .yt-badge { position: absolute; left: 10px; bottom: 14px; font-size: 12px; background: rgba(0,0,0,.6); padding: 2px 8px; border-radius: 4px; }
+  .yt-skip { position: absolute; right: 0; bottom: 14px; font-size: 12px; background: rgba(0,0,0,.7); padding: 6px 12px; border: 1px solid rgba(255,255,255,.3); border-right: 0; }
+  .yt-skip.off { opacity: .8; }
+  .yt-logo { position: absolute; right: 10px; top: 10px; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,.3); display: grid; place-items: center; font-size: 11px; }
+  .yt-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.25); }
+  .yt-bar span { display: block; width: 30%; height: 100%; background: #fbbc04; }
+  .yt-info { display: flex; align-items: center; gap: 10px; padding: 10px 2px; }
+  .yt-info > div { flex: 1; min-width: 0; }
+  .yt-info strong { display: block; font-size: 14px; font-weight: 500; }
+  .yt-info small { color: var(--muted); font-size: 12px; }
+  .yt-cta { flex: none; background: var(--accent); color: #fff; border-radius: 99px; padding: 6px 14px; font-size: 13px; font-weight: 500; }
+  .ph { color: var(--muted); font-style: italic; font-size: 13px; }
+
+  /* review */
+  .review-list { margin: 10px 0 0; display: grid; grid-template-columns: minmax(110px, 38%) 1fr; gap: 8px 12px; font-size: 14px; }
+  .review-list dt { color: var(--muted); font-size: 13px; }
+  .review-list dd { margin: 0; font-weight: 500; }
+  .review-list dd.empty { color: var(--bad); font-weight: 400; }
+  .warn-box { background: var(--ok-soft); border-radius: var(--radius); padding: 12px 16px; font-size: 14px; margin: 16px 0; }
+
+  /* buttons */
+  .btn-primary, .btn-ghost { border-radius: var(--btn-radius); padding: 10px 20px; font-weight: 500; font-size: 14px; border: 1px solid transparent; letter-spacing: .01em; }
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: .4; cursor: default; }
+  .btn-ghost { background: var(--surface); border-color: var(--border); color: var(--accent); }
+  .btn-ghost:hover { background: var(--accent-soft); }
+  .btn-ghost.sm { padding: 4px 12px; font-size: 13px; }
+  .btn-ghost:disabled { opacity: .4; cursor: default; }
+  .block { display: block; width: 100%; padding: 14px; font-size: 16px; margin: 20px 0; }
+  .end-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0; }
+
+  /* bottom nav */
+  #bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); box-shadow: 0 -1px 3px rgba(60, 64, 67, .15); padding-bottom: env(safe-area-inset-bottom); }
+  #bottom-nav .wrap { display: flex; gap: 10px; align-items: center; justify-content: flex-end; height: var(--nav-h); max-width: 840px; }
+  #nav-prev { flex: none; border: 0; background: none; }
+  #nav-next { min-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 12px 20px; font-size: 15px; }
+
+  /* result */
+  .score-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin: 24px 0 8px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .ring { --p: 0; width: 112px; height: 112px; border-radius: 50%; flex: none; display: grid; place-items: center; background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--surface-2) 0); }
+  .ring span { width: 90px; height: 90px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; font-size: 28px; font-weight: 500; line-height: 1.1; text-align: center; }
+  .ring small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .score-info { flex: 1 1 220px; }
+  .score-info .res-pf { font-size: 12px; color: var(--muted); margin: 0; }
+  .score-info h2 { margin: 2px 0 4px; font-size: 18px; font-weight: 500; }
+  .score-info p.comment { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  .counts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .count { font-size: 13px; padding: 2px 10px; border-radius: 99px; font-weight: 500; }
+  .count.good, .mark.good { background: var(--good-soft); color: var(--good); }
+  .count.ok, .mark.ok { background: var(--ok-soft); color: var(--ok); }
+  .count.bad, .mark.bad { background: var(--bad-soft); color: var(--bad); }
+  .critical-box { background: var(--bad-soft); border-radius: var(--radius); padding: 12px 16px; font-size: 14px; margin: 16px 0; }
+  .critical-box strong { color: var(--bad); }
+  .result-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .res-step { font-size: 13px; color: var(--muted); font-weight: 500; margin: 28px 0 -4px; }
+  .res-item { background: var(--surface); border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius); padding: 16px 18px; margin: 12px 0; }
+  .res-item.bad { border-left-color: var(--bad); } .res-item.ok { border-left-color: var(--ok); } .res-item.good { border-left-color: var(--good); }
+  .res-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .res-head h3 { margin: 0; font-size: 15px; font-weight: 500; flex: 1; min-width: 120px; }
+  .mark { font-size: 13px; font-weight: 700; padding: 2px 10px; border-radius: 99px; white-space: nowrap; }
+  .res-rows { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 14px; margin: 12px 0 0; }
+  .res-rows dt { color: var(--muted); font-size: 13px; }
+  .res-rows dd { margin: 0; }
+  .reason { margin: 12px 0 0; font-size: 14px; background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; }
+  .kw-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  .kw-table th, .kw-table td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--border); vertical-align: top; }
+  .kw-table th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .kw-table td.m { font-weight: 700; white-space: nowrap; }
+  .kw-table td.m.good { color: var(--good); } .kw-table td.m.ok { color: var(--ok); } .kw-table td.m.bad { color: var(--bad); }
+  .kw-table .r { color: var(--muted); display: block; margin-top: 2px; }
+
+  /* quiz */
+  .quiz-top { padding: 24px 0 0; }
+  .quiz-bar { height: 4px; background: var(--surface-2); border-radius: 99px; margin-top: 8px; overflow: hidden; }
+  .quiz-bar span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+  .quiz-label { margin: 0; font-size: 12px; color: var(--accent); font-weight: 500; }
+  .quiz-q h2 { font-size: 20px; font-weight: 500; line-height: 1.5; margin: 4px 0 10px; }
+  .quiz-hints { margin: 0 0 4px; padding-left: 1.2em; color: var(--muted); font-size: 14px; }
+  .quiz-ask { font-size: 14px; font-weight: 500; margin: 18px 0 10px; }
+  .quiz-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .quiz-choice { display: flex; align-items: center; gap: 10px; text-align: left; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: 14px; font-weight: 500; }
+  .quiz-choice:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+  .quiz-choice:disabled { cursor: default; opacity: .55; }
+  .quiz-choice.correct { opacity: 1; border-color: var(--good); background: var(--good-soft); box-shadow: inset 0 0 0 1px var(--good); }
+  .quiz-choice.partial { opacity: 1; border-color: var(--ok); background: var(--ok-soft); }
+  .quiz-choice.wrong { opacity: 1; border-color: var(--bad); background: var(--bad-soft); box-shadow: inset 0 0 0 1px var(--bad); }
+  .quiz-choice.picked::after { content: "あなたの回答"; margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 400; }
+  .quiz-fb { border-radius: var(--radius); padding: 18px 20px; margin: 0 0 40px; font-size: 14px; border-left: 4px solid; }
+  .quiz-fb.good { background: var(--good-soft); border-color: var(--good); }
+  .quiz-fb.ok { background: var(--ok-soft); border-color: var(--ok); }
+  .quiz-fb.bad { background: var(--bad-soft); border-color: var(--bad); }
+  .quiz-fb p { margin: 0 0 8px; }
+  .quiz-verdict { font-size: 18px; font-weight: 700; }
+  .quiz-why { background: var(--surface); border-radius: 6px; padding: 8px 10px; }
+
+  /* modal */
+  #modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; }
+  .modal-backdrop { position: absolute; inset: 0; background: rgba(32, 33, 36, .5); }
+  .modal-dialog { position: relative; background: var(--surface); width: min(640px, calc(100% - 32px)); max-height: 86vh; overflow-y: auto; border-radius: 12px; padding: 24px 24px 28px; box-shadow: 0 8px 32px rgba(0, 0, 0, .25); }
+  .modal-dialog h2 { margin: 0 40px 6px 0; font-size: 20px; font-weight: 500; }
+  .modal-dialog h3 { font-size: 14px; font-weight: 500; margin: 20px 0 6px; }
+  .modal-dialog p { margin: 0; font-size: 14px; }
+  #modal-close { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--surface-2); font-size: 18px; }
+  .opt-diff { margin: 0; font-size: 14px; }
+  .opt-diff dt { font-weight: 500; margin-top: 10px; }
+  .opt-diff dd { margin: 2px 0 0; color: var(--muted); }
+  .guide-mini { display: block; margin-top: 6px; padding: 8px 10px; background: var(--surface-2); border-radius: 6px; font-size: 13px; line-height: 1.7; }
+  .guide-mini b { color: var(--text); font-weight: 500; }
+  .mistakes { margin: 0; padding-left: 1.2em; font-size: 14px; }
+  .mistakes li { margin: 4px 0; }
+  .mistakes li::marker { color: var(--bad); }
+  .tip { margin-top: 20px; background: var(--accent-soft); border-radius: var(--radius); padding: 12px 14px; font-size: 14px; }
+  .tip strong { display: block; margin-bottom: 2px; font-weight: 500; }
+
+  /* password gate */
+  body.locked > *:not(#gate) { display: none !important; }
+  body.locked { padding-bottom: 0; }
+  #gate { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: #f1f3f4; }
+  .gate-box { width: min(360px, 100%); background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 32px 24px 20px; text-align: center; color: #202124; }
+  .gate-mark { width: 44px; height: 44px; font-size: 15px; margin: 0 auto 12px; background: #1a73e8; color: #fff; }
+  .gate-box h1 { font-size: 18px; font-weight: 500; margin: 0 0 4px; }
+  .gate-box p { margin: 0 0 16px; font-size: 14px; color: #5f6368; }
+  .gate-box input { width: 100%; font-size: 20px; text-align: center; letter-spacing: .3em; padding: 10px; border: 1px solid #dadce0; border-radius: 6px; }
+  .gate-box .block { margin: 14px 0 10px; background: #1a73e8; color: #fff; }
+  .gate-error { color: #d93025 !important; margin: 8px 0 0 !important; }
+  .gate-box small { color: #5f6368; font-size: 11px; }
+
+  /* =========================================================
+     Meta広告マネージャ風テーマ
+     薄いグレー基調・青アクセント・左ツリー／中央フォーム／右プレビュー
+     ========================================================= */
+  body.theme-meta {
+    --bg: #f0f2f5;
+    --surface: #ffffff;
+    --surface-2: #f0f2f5;
+    --text: #1c2b33;
+    --muted: #65676b;
+    --border: #ced0d4;
+    --accent: #0866ff;
+    --accent-hover: #0757d9;
+    --accent-soft: #e7f0ff;
+    --good: #2e7d32; --good-soft: #e7f4e8;
+    --ok: #a85d00;   --ok-soft: #fff4e0;
+    --bad: #d6311f;  --bad-soft: #fde9e7;
+    --radius: 8px;
+    --btn-radius: 6px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  }
+  .theme-meta .brand { font-size: 16px; color: var(--text); font-weight: 600; }
+  .theme-meta .brand-mark { border-radius: 8px; }
+  .theme-meta .titlebar { background: var(--surface); }
+  .theme-meta .tb-title { font-size: 16px; font-weight: 600; }
+  .theme-meta .stepper-bar { display: none; }
+  .theme-meta .hero h1 { font-weight: 700; font-size: 24px; }
+  .theme-meta .sec-title { font-weight: 700; }
+
+  /* 3 column layout */
+  .theme-meta .wiz-layout {
+    max-width: 1320px; padding: 16px 16px 0; display: grid; gap: 16px; align-items: start;
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+  .theme-meta .wiz-layout.has-side { grid-template-columns: 248px minmax(0, 1fr) 360px; }
+  .theme-meta .wiz-main { min-width: 0; }
+  .theme-meta .tree, .theme-meta .side { display: block; position: sticky; top: 70px; }
+  .theme-meta .side:empty { display: none; }
+
+  /* hierarchy tree */
+  .tree { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-size: 13px; }
+  .tree-cap { margin: 4px 8px 8px; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+  .tree-level { position: relative; }
+  .tree-level.lv-adset { margin-left: 14px; }
+  .tree-level.lv-ad { margin-left: 28px; }
+  .tree-level.lv-adset::before, .tree-level.lv-ad::before { content: ""; position: absolute; left: -7px; top: 0; height: 22px; width: 6px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .tree-node { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 7px 8px; border-radius: 6px; text-align: left; color: var(--text); }
+  .tree-node:hover { background: var(--surface-2); }
+  .tree-node .lv-ico { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); flex: none; }
+  .tree-node span.t { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+  .tree-node strong { font-size: 13px; font-weight: 600; }
+  .tree-node small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tree-level.active > .tree-node { background: var(--accent-soft); }
+  .tree-level.active > .tree-node .lv-ico { background: var(--accent); color: #fff; }
+  .tree-done { margin-left: auto; color: var(--good); font-weight: 700; }
+  .tree-steps { list-style: none; margin: 2px 0 6px; padding: 0 0 0 42px; }
+  .tree-step { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; text-align: left; padding: 4px 8px; border-radius: 6px; color: var(--muted); font-size: 12px; }
+  .tree-step:hover { background: var(--surface-2); color: var(--text); }
+  .tree-step.current { color: var(--accent); font-weight: 700; background: var(--accent-soft); }
+  .tree-step .ok-dot { margin-left: auto; color: var(--good); }
+  .tree-review { margin-top: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
+
+  /* level banner (always visible current level) */
+  .theme-meta .level-banner { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; }
+  .level-banner .lv-ico { width: 30px; height: 30px; border-radius: 6px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
+  .level-banner .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .level-banner .crumbs b { color: var(--accent); }
+  .level-banner .lv-desc { color: var(--text); }
+  .theme-meta .step-head { padding: 18px 0 4px; }
+  .theme-meta .step-head h2 { font-size: 20px; font-weight: 700; }
+  .theme-meta .step-count { font-weight: 600; }
+  .theme-meta .field { padding: 20px; margin: 14px 0; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); border-color: #dddfe2; }
+  .theme-meta .field-head h3 { font-size: 15px; font-weight: 700; }
+  .theme-meta .opt { padding: 12px 14px; }
+  .theme-meta .opt-label, .theme-meta .tile-label { font-weight: 600; }
+  .theme-meta .brief, .theme-meta .free-note { background: var(--surface); border: 1px solid var(--border); }
+  .theme-meta .brief { margin-top: 12px; border-left: 4px solid var(--accent); }
+  .theme-meta .free-note { margin-top: 12px; }
+  .theme-meta .btn-primary, .theme-meta .btn-ghost { font-weight: 600; }
+  .theme-meta .btn-ghost { color: var(--text); background: #e4e6eb; border-color: transparent; }
+  .theme-meta .btn-ghost:hover { background: #d8dadf; }
+  .theme-meta #nav-prev { background: #e4e6eb; }
+  .theme-meta #bottom-nav { box-shadow: 0 -1px 0 var(--border); }
+  .theme-meta #bottom-nav .wrap { max-width: 1320px; }
+  .theme-meta .score-card, .theme-meta .res-item { box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+
+  /* Meta preview */
+  .side .preview-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .preview-panel .pv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .preview-panel .pv-head h3 { margin: 0; font-size: 14px; font-weight: 700; }
+  .pv-tabs { display: inline-flex; background: var(--surface-2); border-radius: 6px; padding: 2px; }
+  .pv-tab { border: 0; background: none; font-size: 12px; padding: 4px 10px; border-radius: 5px; color: var(--muted); }
+  .pv-tab.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .1); }
+  .pv-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  .pv-note.warn { color: var(--ok); }
+  .fb-post { border: 1px solid #dddfe2; border-radius: 8px; background: #fff; overflow: hidden; max-width: 340px; margin: 0 auto; color: #050505; }
+  .fb-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; }
+  .fb-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #c9d6ea, #9fb4d6); display: grid; place-items: center; font-weight: 700; color: #fff; flex: none; }
+  .fb-head strong { font-size: 13px; display: block; line-height: 1.3; }
+  .fb-head small { font-size: 11px; color: #65676b; }
+  .fb-text { padding: 0 12px 8px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .fb-text .more { color: #65676b; }
+  .fb-media { background: linear-gradient(135deg, #dfe6f1, #b9c7dd); display: grid; place-items: center; color: #4b5b73; font-size: 12px; }
+  .fb-carousel { display: flex; gap: 6px; overflow: hidden; padding: 0 0 0 12px; }
+  .fb-card { flex: 0 0 72%; border: 1px solid #dddfe2; border-radius: 6px; overflow: hidden; }
+  .fb-card .fb-media { aspect-ratio: 1 / 1; }
+  .fb-card .fb-cap { font-size: 12px; font-weight: 600; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fb-collection { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 2px; }
+  .fb-collection .fb-media { aspect-ratio: 1 / 1; }
+  .fb-foot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #f0f2f5; }
+  .fb-foot > div { flex: 1; min-width: 0; }
+  .fb-foot small { font-size: 11px; color: #65676b; text-transform: uppercase; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fb-foot strong { font-size: 13px; display: block; line-height: 1.35; word-break: break-word; }
+  .fb-cta { flex: none; background: #e4e6eb; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .pv-and { font-weight: 400; color: #65676b; }
+  .fb-react { font-size: 12px; color: #65676b; padding: 8px 12px; border-top: 1px solid #e4e6eb; }
+  .if-form { max-width: 320px; margin: 0 auto; border: 1px solid #dddfe2; border-radius: 10px; padding: 14px; background: #fff; color: #050505; font-size: 13px; }
+  .if-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; } .if-head .fb-avatar { width: 28px; height: 28px; font-size: 12px; }
+  .if-title { font-weight: 700; font-size: 15px; margin: 0 0 10px; }
+  .if-field { border: 1px solid #ced0d4; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; position: relative; }
+  .if-field small { display: block; font-size: 11px; color: #65676b; }
+  .if-field span { position: absolute; right: 8px; top: 8px; font-size: 10px; color: #0866ff; }
+  .if-field.empty { color: #65676b; }
+  .if-privacy { font-size: 12px; color: #0866ff; margin: 4px 0 10px; }
+  .if-step { font-size: 11px; color: #65676b; margin: 6px 0; }
+  .if-submit { display: block; text-align: center; background: #0866ff; color: #fff; border-radius: 6px; padding: 8px; font-weight: 600; }
+  .story { position: relative; width: 220px; aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #222; color: #fff; display: grid; place-items: center; }
+  .story .fb-media { width: 100%; }
+  .story-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 6px; padding: 10px; font-size: 11px; background: linear-gradient(rgba(0,0,0,.45), transparent); }
+  .story-top .fb-avatar { width: 24px; height: 24px; font-size: 10px; }
+  .story-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px; background: linear-gradient(transparent, rgba(0,0,0,.6)); font-size: 11px; text-align: center; }
+  .story-bottom p { margin: 0 0 8px; text-align: left; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .story-cta { display: inline-block; background: #fff; color: #050505; border-radius: 99px; padding: 5px 14px; font-weight: 600; font-size: 12px; }
+  .story.letterbox .fb-media { filter: none; }
+
+  /* =========================================================
+     responsive
+     ========================================================= */
+  @media (max-width: 1180px) {
+    .theme-meta .wiz-layout.has-side { grid-template-columns: 220px minmax(0, 1fr); }
+    .theme-meta .wiz-layout.has-side .side { grid-column: 2; position: static; }
+  }
+  @media (max-width: 820px) {
+    .theme-meta .wiz-layout, .theme-meta .wiz-layout.has-side { grid-template-columns: minmax(0, 1fr); padding-top: 0; gap: 0; }
+    .theme-meta .wiz-layout.has-side .side { grid-column: 1; margin-top: 8px; }
+    /* tree → horizontal level bar */
+    .theme-meta .tree { position: sticky; top: 54px; z-index: 20; margin: 0 -16px; border-radius: 0; border-width: 0 0 1px; padding: 6px 10px; display: flex; gap: 4px; overflow-x: auto; }
+    .theme-meta .tree-cap, .theme-meta .tree-steps { display: none; }
+    .theme-meta .tree-level { margin-left: 0 !important; flex: 0 0 auto; }
+    .theme-meta .tree-level::before { display: none; }
+    .theme-meta .tree-level + .tree-level > .tree-node::before { content: "›"; color: var(--muted); margin-right: 2px; }
+    .theme-meta .tree-node { padding: 6px; justify-content: center; }
+    .theme-meta .tree-node small { display: none; }
+    .theme-meta .tree-review { margin: 0; border: 0; padding: 0; }
+  }
+  @media (max-width: 560px) {
+    .brand { font-size: 15px; gap: 8px; }
+    .practice-chip { font-size: 10px; padding: 1px 6px; }
+    .hero h1 { font-size: 21px; }
+    #stepper { justify-content: flex-start; }
+    .step-chip { width: 76px; font-size: 11px; }
+    .step-head h2 { font-size: 20px; }
+    .field { padding: 16px; }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .tile { padding: 14px 12px; }
+    #nav-next { flex: 1; min-width: 0; }
+    .pf-btn { padding: 12px; gap: 8px; }
+    .pf-icon { font-size: 22px; }
+    #modal { align-items: flex-end; }
+    .modal-dialog { width: 100%; max-height: 88vh; border-radius: 16px 16px 0 0; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+    .seg { width: 100%; }
+    .seg-btn { flex: 1; }
+    .review-list, .res-rows, .brief dl { grid-template-columns: 1fr; gap: 0; }
+    .review-list dd, .res-rows dd, .brief dd { margin-bottom: 8px; }
+    .theme-meta .tree-node .lv-ico { width: 22px; height: 22px; }
+    .theme-meta .tree-node strong { font-size: 12px; }
+    .level-banner .lv-ico { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 簡易パスワード画面（パスワードは config.js で変更できます） -->
+<div id="gate" hidden>
+  <form class="gate-box" id="gate-form" autocomplete="off">
+    <span class="brand-mark gate-mark" aria-hidden="true">Ad</span>
+    <h1>広告キャンペーン作成トレーナー</h1>
+    <p>パスワードを入力してください</p>
+    <input type="password" id="gate-input" inputmode="numeric" aria-label="パスワード" autofocus>
+    <p class="gate-error" id="gate-error" role="alert" hidden>パスワードが違います</p>
+    <button type="submit" class="btn-primary block">入る</button>
+    <small>練習用ツール</small>
+  </form>
+</div>
+
+<header class="app-header">
+  <div class="wrap">
+    <button class="brand" data-action="home" aria-label="ホームへ戻る">
+      <span class="brand-mark" aria-hidden="true">Ad</span>
+      <span class="brand-text">広告キャンペーン作成トレーナー</span>
+    </button>
+    <span class="header-right">
+      <span class="practice-chip" title="実際の広告管理画面ではありません">練習用ツール</span>
+      <span class="mode-badge" id="mode-badge" hidden></span>
+    </span>
+  </div>
+</header>
+
+<main>
+  <section id="view-home" class="wrap"></section>
+
+  <section id="view-wizard" hidden>
+    <div class="titlebar">
+      <div class="wrap">
+        <button class="tb-close" data-action="home" aria-label="作成をやめてホームに戻る">×</button>
+        <span class="tb-title"><span id="tb-title">新しいキャンペーン</span><small>練習用シミュレーター・実際の管理画面ではありません</small></span>
+      </div>
+    </div>
+    <div class="stepper-bar"><nav id="stepper" aria-label="ステップ"></nav></div>
+    <div class="wiz-layout" id="wiz-layout">
+      <nav class="tree" id="tree" aria-label="キャンペーンの階層"></nav>
+      <div class="wiz-main">
+        <div id="brief"></div>
+        <div id="step-body"></div>
+      </div>
+      <aside class="side" id="side" aria-label="広告プレビュー"></aside>
+    </div>
+  </section>
+
+  <section id="view-result" class="wrap" hidden></section>
+
+  <section id="view-quiz" class="wrap" hidden></section>
+
+  <section id="view-guide" class="wrap" hidden></section>
+</main>
+
+<nav id="bottom-nav" hidden>
+  <div class="wrap">
+    <button class="btn-ghost" id="nav-prev" data-action="prev">← 戻る</button>
+    <button class="btn-primary" id="nav-next" data-action="next">次へ</button>
+  </div>
+</nav>
+
+<div id="modal" hidden>
+  <div class="modal-backdrop" data-action="close-modal"></div>
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <button id="modal-close" data-action="close-modal" aria-label="閉じる">×</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- 設定（パスワードなど） -->
+<script src="config.js"></script>
+<script>
+(function () {
+  // 簡易パスワード画面：一度正しく入力したブラウザでは、次回から表示しない
+  const pw = String((window.TRAINER_CONFIG || {}).password || '');
+  if (!pw) return;
+  const KEY = 'adsTrainer.unlocked';
+  // パスワードそのものではなく簡易的なハッシュを保存（パスワードを変えると再入力が必要になる）
+  const hash = t => { let h = 5381; for (const c of t) h = ((h << 5) + h + c.codePointAt(0)) >>> 0; return h.toString(36); };
+  let ok = false;
+  try { ok = localStorage.getItem(KEY) === hash(pw); } catch (e) { /* 保存できない環境では毎回入力 */ }
+  if (ok) return;
+  const gate = document.getElementById('gate');
+  document.body.classList.add('locked');
+  gate.hidden = false;
+  const input = document.getElementById('gate-input');
+  input.focus();
+  document.getElementById('gate-form').addEventListener('submit', e => {
+    e.preventDefault();
+    if (input.value === pw) {
+      try { localStorage.setItem(KEY, hash(pw)); } catch (err) { /* 保存できなくても今回は入れる */ }
+      document.body.classList.remove('locked');
+      gate.hidden = true;
+    } else {
+      document.getElementById('gate-error').hidden = false;
+      input.select();
+    }
+  });
+})();
+</script>
+
+<!-- 解説データ（媒体ごとに1ファイル） -->
+<script src="data-google.js"></script>
+<script src="data-google-video.js"></script>
+<script src="data-google-pmax.js"></script>
+<script src="data-google-display.js"></script>
+<script src="data-google-demandgen.js"></script>
+<script src="data-google-shopping.js"></script>
+<script src="data-google-app.js"></script>
+<script src="data-google-quiz.js"></script>
+<script src="data-meta.js"></script>
+<script src="data-meta-prep.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const PLATFORMS = window.TRAINER_PLATFORMS || {};
+  const PIDS = Object.keys(PLATFORMS);
+  if (!PIDS.length) {
+    document.getElementById('view-home').innerHTML =
+      '<p style="padding:24px 0">解説データ（data-google.js / data-meta.js）を読み込めませんでした。index.html と同じフォルダにあるか確認してください。</p>';
+    return;
+  }
+  const LS_KEY = 'adsTrainer.platform';
+  const QUIZ_LEN = 10;
+
+  /* ---------- helpers ---------- */
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = n => Math.round(n).toLocaleString('ja-JP');
+
+  let D = null; // 選択中の媒体のデータ
+  const fieldOf = id => D.fields[id];
+  const optLabel = (fid, v) => ((fieldOf(fid).options || []).find(o => o.value === v) || {}).label || v;
+
+  const MARK = {
+    good: { sym: '◎', text: '正解', pt: 2 },
+    ok:   { sym: '△', text: '惜しい', pt: 1 },
+    bad:  { sym: '×', text: '見直し', pt: 0 }
+  };
+
+  // 汎用アイコン（ロゴではなく一般的な図形）
+  const svg = (d, size = 32) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICON_PATHS = {
+    cart: '<path d="M3 4h2l2.4 11h10.2L20 7H6.2"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>',
+    people: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 13.6c2.6.2 4.5 2.1 4.5 4.9"/>',
+    cursor: '<path d="M5 3l6.5 17 2.3-7 7.2-2.3z"/>',
+    store: '<path d="M4 9.5V20h16V9.5"/><path d="M3 9.5L5 4h14l2 5.5c0 1.4-1.2 2.5-2.6 2.5S16 10.9 16 9.5c0 1.4-1.2 2.5-2.6 2.5h-2.8C9.2 12 8 10.9 8 9.5 8 10.9 6.8 12 5.4 12S3 10.9 3 9.5z"/><path d="M10 20v-5h4v5"/>',
+    megaphone: '<path d="M4 10v4h3l7 4V6L7 10z"/><path d="M17.5 9a4 4 0 010 6"/><path d="M7 14l1.5 5h2.5L10 15"/>',
+    tune: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"/>',
+    phone: '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 17.5h2"/>',
+    campaign: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+    adset: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+    ad: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/>',
+    review: '<path d="M5 12l4 4 10-10"/>',
+    search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+    sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+    spark2: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10"/><path d="M10 8l4 2-4 2z"/>',
+    play: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 17l-5.5-5.5L6 20"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.4"/>',
+    compare: '<path d="M12 4v16"/><path d="M5 8h4l-2 6zM15 8h4l-2 6z"/><path d="M4 14a3 3 0 006 0M14 14a3 3 0 006 0"/>'
+  };
+  const icon = (k, size) => ICON_PATHS[k] ? svg(ICON_PATHS[k], size) : '';
+
+  const KW_LABEL = { add: '追加', negative: '除外', skip: '使わない' };
+  const MATCH = {
+    broad:  { label: '部分一致',   note: k => k,        desc: k => `「${k}」に関連する幅広い検索（類義語・関連語を含む）に表示` },
+    phrase: { label: 'フレーズ一致', note: k => `"${k}"`, desc: k => `「${k}」の意味を含む検索に表示` },
+    exact:  { label: '完全一致',   note: k => `[${k}]`,  desc: k => `「${k}」と同じ意味の検索にだけ表示` }
+  };
+
+  // Google広告の文字数カウント：全角は2、半角(英数・半角カナ)は1
+  function adWidth(s) {
+    let n = 0;
+    for (const ch of s) {
+      const c = ch.codePointAt(0);
+      n += (c <= 0x7e || (c >= 0xff61 && c <= 0xff9f)) ? 1 : 2;
+    }
+    return n;
+  }
+  const textWidth = (f, s) => f.count === 'chars' ? [...s].length : adWidth(s);
+
+  function seededShuffle(arr, seed) {
+    const a = arr.slice();
+    let s = seed || 0;
+    if (!s) return a;
+    const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  /* ---------- state ---------- */
+  const state = {
+    platform: null,
+    scenario: null,
+    step: 0,
+    answers: {},
+    customKw: [],
+    showHints: false,
+    briefOpen: true,
+    previewSeed: 0,
+    previewPlacement: 'feed',
+    advOpen: false,        // 「上級設定」の折りたたみを開いているか
+    typeCommitted: null,   // シナリオモードで「次へ」を押した時点のキャンペーンタイプ（採点に使う）
+    scFilter: 'all',       // ホームのシナリオ絞り込み
+    quiz: null
+  };
+
+  function setPlatform(id) {
+    if (!PLATFORMS[id]) id = PIDS[0];
+    state.platform = id;
+    D = PLATFORMS[id];
+    try { localStorage.setItem(LS_KEY, id); } catch (e) { /* 保存できなくても動作に影響なし */ }
+    for (const p of PIDS) document.body.classList.remove('theme-' + (PLATFORMS[p].theme || p));
+    document.body.classList.add('theme-' + (D.theme || id));
+  }
+
+  function initAnswers() {
+    const a = {};
+    for (const [id, f] of Object.entries(D.fields)) {
+      if (f.type === 'multi') a[id] = Array.isArray(f.default) ? f.default.slice() : [];
+      else if (f.type === 'textlist') a[id] = Array(f.initial || 2).fill('');
+      else if (f.type === 'keywords') a[id] = {};
+      else a[id] = f.default != null ? f.default : null;
+    }
+    return a;
+  }
+
+  const kwCandidates = () => state.scenario ? state.scenario.keywords : D.freeKeywords.list;
+  const showDesc = () => !state.scenario || state.showHints;
+  const levelOf = step => (D.levels || []).find(l => l.id === step.level);
+
+  /* ---------- キャンペーンタイプごとの流れ ---------- */
+  const scenarioType = sc => sc.type || 'search';
+  // 今どのタイプの流れで設定しているか（未決定なら null）
+  function flowType() {
+    if (!D.flows) return null;
+    if (state.scenario) return state.typeCommitted ? scenarioType(state.scenario) : null;
+    const t = state.answers[D.typeField];
+    return t && D.flows[t] ? t : null;
+  }
+  // 現在のステップ一覧（Metaは固定、Googleは 共通 → タイプ別 → 確認）
+  function S() {
+    if (!D.flows) return D.steps;
+    const t = flowType();
+    return [...D.baseSteps, ...(t ? D.flows[t].steps : []), D.reviewStep];
+  }
+  // 現在の広告プレビューの設定
+  function PV() {
+    if (!D.flows) return D.preview;
+    const t = flowType();
+    return t ? D.flows[t].preview : null;
+  }
+  const typeLabel = t => D.flows && D.flows[t] ? D.flows[t].label : optLabel(D.typeField, t);
+  // 採点・表示に使う値（タイプは確定した値）
+  function answerOf(fid) {
+    if (state.scenario && D.typeField === fid && state.typeCommitted) return state.typeCommitted;
+    return state.answers[fid];
+  }
+
+  function validLines(fid) {
+    const f = fieldOf(fid);
+    return state.answers[fid].map(s => s.trim()).filter(s => s && (f.soft || textWidth(f, s) <= f.limit));
+  }
+
+  // showIf の条件を満たすか（満たさない項目は表示・採点しない）
+  function visible(fid) {
+    const c = fieldOf(fid).showIf;
+    if (!c) return true;
+    const v = state.answers[c.field];
+    if (c.in) return c.in.includes(v);
+    if (c.notIn) return !c.notIn.includes(v);
+    return true;
+  }
+  // シナリオの正解（シナリオ固有 → 共通の defaultAnswers の順に探す）
+  const scAnswer = fid => state.scenario && (state.scenario.answers[fid] || (D.defaultAnswers || {})[fid]);
+
+  function isAnswered(fid) {
+    if (!visible(fid)) return true;
+    const f = fieldOf(fid), v = state.answers[fid];
+    switch (f.type) {
+      case 'single':   return v != null;
+      case 'multi':    return v.length > 0;
+      case 'keywords': return kwCandidates().every((_, i) => v[i]);
+      case 'textlist': return validLines(fid).length > 0;
+      case 'number':   return v != null && v > 0;
+    }
+    return false;
+  }
+  const stepDone = s => s.fields.length > 0 && s.fields.every(isAnswered);
+  // 初期値から変更した項目があるか（ホームに戻るときの確認用）
+  const hasProgress = () => Object.entries(D.fields).some(([id, f]) => {
+    const v = state.answers[id];
+    if (f.default != null) return JSON.stringify(v) !== JSON.stringify(f.default);
+    return visible(id) && isAnswered(id);
+  });
+
+  /* ---------- views ---------- */
+  function show(view) {
+    for (const v of ['home', 'wizard', 'result', 'quiz', 'guide']) $('#view-' + v).hidden = v !== view;
+    $('#bottom-nav').hidden = view !== 'wizard';
+    document.body.classList.toggle('has-nav', view === 'wizard');
+    const badge = $('#mode-badge');
+    badge.hidden = view === 'home';
+    badge.textContent = `${D.info.short}｜${view === 'quiz' ? 'クイズ' : view === 'guide' ? '準備' : state.scenario ? 'シナリオ' : '自由練習'}`;
+    window.scrollTo(0, 0);
+  }
+
+  function renderHome() {
+    const budgetOf = sc => (sc.facts.find(f => /予算/.test(f[0])) || [, ''])[1];
+    const flow = D.levels
+      ? `<div class="flow-groups">${D.levels.map(lv => `
+          <div class="flow-group"><span class="flow-lv">${esc(lv.label)}</span>
+            <ol class="flow" style="counter-reset: flow ${D.steps.findIndex(s => s.level === lv.id)}">${D.steps.filter(s => s.level === lv.id).map(s => `<li>${esc(s.title)}</li>`).join('')}</ol>
+          </div>`).join('')}</div>`
+      : D.flows
+        ? `<ol class="flow">${D.baseSteps.map(s => `<li>${esc(s.title)}</li>`).join('')}<li>タイプ別の設定（${Object.keys(D.flows).length}種類）</li><li>${esc(D.reviewStep.title)}</li></ol>`
+        : `<ol class="flow">${D.steps.map(s => `<li>${esc(s.title)}</li>`).join('')}</ol>`;
+
+    $('#view-home').innerHTML = `
+      <div class="platform-switch" role="tablist" aria-label="練習する媒体">
+        ${PIDS.map(id => {
+          const info = PLATFORMS[id].info;
+          return `<button class="pf-btn ${id === state.platform ? 'on' : ''}" role="tab" aria-selected="${id === state.platform}" data-action="platform" data-id="${id}">
+            <span class="pf-icon" aria-hidden="true">${esc(info.icon)}</span>
+            <span><strong>${esc(info.name)}</strong><small>${esc(info.sub || '')}</small></span>
+          </button>`;
+        }).join('')}
+      </div>
+      <div class="hero">
+        <h1>${D.info.title}</h1>
+        <p>${esc(D.info.intro)} 各項目の <span class="i-inline">i</span> ボタンで、役割・選択肢ごとの違い・よくある失敗を確認できます。</p>
+        ${flow}
+      </div>
+      ${D.guide ? `
+      <h2 class="sec-title">はじめに</h2>
+      <button class="mode-card guide-card" data-action="open-guide">
+        <span class="mode-icon" aria-hidden="true">📋</span>
+        <span><strong>${esc(D.guide.title)}</strong><small>${D.guide.sections.map(x => esc(x.title.replace(/（.*?）/g, ''))).join('・')}を解説します。チェックリスト付き。</small></span>
+      </button>` : ''}
+      <h2 class="sec-title">自由練習モード</h2>
+      <button class="mode-card" data-action="start-free">
+        <span class="mode-icon" aria-hidden="true">📝</span>
+        <span><strong>好きに選んで、解説を読む</strong><small>選択肢ごとの説明が表示されます。採点はありません。</small></span>
+      </button>
+      ${D.quiz && D.quiz.length ? `
+      <h2 class="sec-title">クイズモード</h2>
+      <button class="mode-card" data-action="start-quiz">
+        <span class="mode-icon" aria-hidden="true">❓</span>
+        <span><strong>どのキャンペーンタイプを選ぶ？</strong><small>お題を読んで最適なキャンペーンタイプを当てるクイズです（全${Math.min(QUIZ_LEN, D.quiz.length)}問）。</small></span>
+      </button>` : ''}
+      <h2 class="sec-title">シナリオモード<small>お題に合う設定を選び、最後に採点します</small></h2>
+      ${D.flows ? `<div class="filter-chips" role="tablist" aria-label="キャンペーンタイプで絞り込む">
+        ${['all', ...Object.keys(D.flows)].map(t => {
+          const n = t === 'all' ? D.scenarios.length : D.scenarios.filter(sc => scenarioType(sc) === t).length;
+          return `<button class="chip ${state.scFilter === t ? 'on' : ''}" role="tab" aria-selected="${state.scFilter === t}" data-action="sc-filter" data-val="${t}">${t === 'all' ? 'すべて' : esc(typeLabel(t))}<span>${n}</span></button>`;
+        }).join('')}
+      </div>` : ''}
+      <div class="scenario-grid">
+        ${D.scenarios.filter(sc => !D.flows || state.scFilter === 'all' || scenarioType(sc) === state.scFilter).map(sc => {
+          const critical = Object.values(sc.answers).some(a => a.critical);
+          return `<button class="sc-card" data-action="start-scenario" data-id="${esc(sc.id)}">
+            <span class="sc-top"><span class="sc-icon" aria-hidden="true">${esc(sc.icon)}</span>${D.flows ? `<span class="tag tag-type">${esc(typeLabel(scenarioType(sc)))}</span>` : ''}<span class="tag">${esc(sc.category)}</span><span class="tag tag-level">${esc(sc.level)}</span>${critical ? '<span class="tag tag-warn">重要項目あり</span>' : ''}</span>
+            <strong>${esc(sc.title)}</strong>
+            <small>予算：${esc(budgetOf(sc))}</small>
+          </button>`;
+        }).join('')}
+      </div>
+      <p class="note">※学習用の簡易シミュレーターです。各社の公式ツールではなく、実際の管理画面の名称・手順・ルールはアップデートで変わることがあります。</p>`;
+  }
+
+  function start(scenarioId) {
+    state.scenario = scenarioId ? D.scenarios.find(s => s.id === scenarioId) : null;
+    state.step = 0;
+    state.answers = initAnswers();
+    state.customKw = [];
+    state.showHints = false;
+    state.briefOpen = true;
+    state.previewSeed = 0;
+    state.previewPlacement = 'feed';
+    state.typeCommitted = null;
+    $('#tb-title').textContent = D.info.editorTitle || '新しいキャンペーン';
+    show('wizard');
+    renderWizard();
+  }
+
+  function goStep(i) {
+    state.step = Math.max(0, Math.min(S().length - 1, i));
+    if ($('#view-wizard').hidden) show('wizard');
+    renderWizard();
+    window.scrollTo(0, 0);
+  }
+
+  function renderWizard() {
+    renderStepper();
+    renderTree();
+    renderBrief();
+    renderStep();
+    renderNav();
+  }
+
+  function renderStepper() {
+    const nav = $('#stepper');
+    nav.innerHTML = S().map((s, i) => {
+      const done = stepDone(s);
+      const active = i === state.step;
+      return `<button class="step-chip ${active ? 'active' : ''} ${done ? 'done' : ''}" data-action="goto-step" data-step="${i}" ${active ? 'aria-current="step"' : ''}>
+        <span class="num">${done && !active ? '✓' : i + 1}</span>${esc(s.title)}</button>`;
+    }).join('');
+    const a = $('.active', nav);
+    if (a && nav.offsetParent) nav.scrollLeft = a.offsetLeft - nav.clientWidth / 2 + a.offsetWidth / 2;
+  }
+
+  /* Meta: キャンペーン / 広告セット / 広告 の階層ツリー */
+  function renderTree() {
+    const el = $('#tree');
+    if (!D.levels) { el.innerHTML = ''; return; }
+    const cur = S()[state.step];
+    const obj = state.answers.objective;
+    const names = {
+      campaign: obj ? `新しい${optLabel('objective', obj)}キャンペーン` : '新しいキャンペーン',
+      adset: '新しい広告セット',
+      ad: '新しい広告'
+    };
+    let html = `<p class="tree-cap">キャンペーンの構成</p>`;
+    html += D.levels.map(lv => {
+      const steps = S().map((s, i) => ({ s, i })).filter(x => x.s.level === lv.id);
+      const active = cur.level === lv.id;
+      const done = steps.every(x => stepDone(x.s));
+      return `<div class="tree-level lv-${lv.id} ${active ? 'active' : ''}">
+        <button class="tree-node" data-action="goto-step" data-step="${steps[0].i}" ${active ? 'aria-current="true"' : ''}>
+          <span class="lv-ico">${icon(lv.id, 16)}</span>
+          <span class="t"><strong>${esc(lv.label)}</strong><small>${esc(names[lv.id] || '')}</small></span>
+          ${done ? '<span class="tree-done" aria-label="設定済み">✓</span>' : ''}
+        </button>
+        <ul class="tree-steps">${steps.map(x => `<li><button class="tree-step ${x.i === state.step ? 'current' : ''}" data-action="goto-step" data-step="${x.i}">${esc(x.s.title)}${stepDone(x.s) ? '<span class="ok-dot">✓</span>' : ''}</button></li>`).join('')}</ul>
+      </div>`;
+    }).join('');
+    const ri = S().findIndex(s => !s.level);
+    if (ri >= 0) {
+      html += `<div class="tree-level tree-review ${!cur.level ? 'active' : ''}">
+        <button class="tree-node" data-action="goto-step" data-step="${ri}"><span class="lv-ico">${icon('review', 16)}</span><span class="t"><strong>${esc(S()[ri].title)}</strong><small>設定を確認して採点</small></span></button>
+      </div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  function renderBrief() {
+    const el = $('#brief');
+    const sc = state.scenario;
+    if (!sc) {
+      el.innerHTML = `<div class="free-note">📝 自由練習モード：選択肢ごとの説明が表示されます。詳しく知りたい項目は <span class="i-inline">i</span> を押してください。</div>`;
+      return;
+    }
+    el.innerHTML = `
+      <details class="brief" ${state.briefOpen ? 'open' : ''}>
+        <summary><span class="sc-icon" aria-hidden="true">${esc(sc.icon)}</span>
+          <span><small>お題｜${esc(sc.category)}</small><strong>${esc(sc.title)}</strong></span></summary>
+        <dl>${sc.facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+        <label class="hint-toggle"><input type="checkbox" data-role="hints" ${state.showHints ? 'checked' : ''}> 選択肢の説明（ヒント）を表示する</label>
+      </details>`;
+    $('details', el).addEventListener('toggle', e => { state.briefOpen = e.target.open; });
+  }
+
+  function renderLevelBanner(s) {
+    if (!D.levels) return '';
+    const lv = levelOf(s);
+    const crumbs = D.levels.map(l => l.id === s.level ? `<b>${esc(l.label)}</b>` : esc(l.label)).join(' › ');
+    if (!lv) return `<div class="level-banner"><span class="lv-ico">${icon('review', 18)}</span><div><div class="crumbs">${crumbs}</div><div class="lv-desc">すべての階層の設定を確認します</div></div></div>`;
+    return `<div class="level-banner"><span class="lv-ico">${icon(lv.id, 18)}</span>
+      <div><div class="crumbs">いま設定中：${crumbs}</div><div class="lv-desc">${esc(lv.desc)}</div></div></div>`;
+  }
+
+  function stepCountText() {
+    const lv = levelOf(S()[state.step]);
+    return `STEP ${state.step + 1} / ${S().length}${lv ? `　·　${esc(lv.label)}` : ''}`;
+  }
+
+  function renderStep() {
+    const s = S()[state.step];
+    const lv = levelOf(s);
+    let html = `<div class="step-head">
+        ${renderLevelBanner(s)}
+        <p class="step-count" id="step-count" style="margin-top:${D.levels ? '14px' : '0'}">${stepCountText()}</p>
+        <h2>${esc(s.title)}</h2>
+        <p class="lead">${esc(s.lead)}</p>
+      </div>`;
+    const sc = state.scenario;
+    if (sc && D.flows && state.typeCommitted && state.typeCommitted !== scenarioType(sc) && s === S()[D.baseSteps.length]) {
+      html += `<div class="warn-box">ℹ️ このお題は「${esc(typeLabel(scenarioType(sc)))}」キャンペーンで作成します。あなたが選んだ「${esc(typeLabel(state.typeCommitted))}」との違いは、採点結果で確認しましょう。</div>`;
+    }
+    if (s.id === 'review') {
+      html += renderReview();
+    } else {
+      const shown = s.fields.filter(visible);
+      for (const fid of shown.filter(id => !fieldOf(id).advanced)) {
+        html += renderField(fid);
+        if (PV() && PV().after === fid) html += renderPreviewCard();
+      }
+      const adv = shown.filter(id => fieldOf(id).advanced);
+      if (adv.length) {
+        html += `<details class="adv-box" ${state.advOpen ? 'open' : ''}>
+          <summary><span class="adv-tag">上級</span>上級設定（${adv.length}項目）<small>初心者は初期設定のままでOK。開くと設定を確認・変更できます</small></summary>
+          ${adv.map(renderField).join('')}
+        </details>`;
+      }
+    }
+    $('#step-body').innerHTML = html;
+    const advBox = $('#step-body .adv-box');
+    if (advBox) advBox.addEventListener('toggle', () => { state.advOpen = advBox.open; });
+
+    // Meta: 広告の階層では右側にプレビュー
+    const side = $('#side');
+    const sidePreview = PV() && PV().level && s.level === PV().level;
+    side.innerHTML = sidePreview ? renderPreviewCard() : '';
+    $('#wiz-layout').classList.toggle('has-side', !!sidePreview);
+    updatePreview();
+  }
+
+  function renderNav() {
+    const last = state.step === S().length - 1;
+    $('#nav-prev').disabled = state.step === 0;
+    const next = $('#nav-next');
+    next.disabled = false;
+    if (last) {
+      next.hidden = !state.scenario;
+      next.textContent = '採点する';
+      next.dataset.action = 'grade';
+    } else if (D.flows && S()[state.step].fields.includes(D.typeField) && !state.answers[D.typeField]) {
+      next.hidden = false;
+      next.disabled = true;
+      next.textContent = 'キャンペーンタイプを選んでください';
+      next.dataset.action = 'next';
+      return;
+    } else {
+      const ns = S()[state.step + 1];
+      const lvChange = D.levels && ns.level && ns.level !== S()[state.step].level;
+      next.hidden = false;
+      const typePending = D.flows && S()[state.step].fields.includes(D.typeField) && !flowType();
+      next.textContent = typePending ? '次へ：タイプ別の設定 →' : lvChange ? `次へ：${levelOf(ns).label}の設定 →` : `次へ：${ns.title} →`;
+      next.dataset.action = 'next';
+    }
+  }
+
+  /* ---------- fields ---------- */
+  // 初期値の選択肢名（「（初期設定）」などの補足は除く）
+  const defaultLabel = fid => optLabel(fid, fieldOf(fid).default).replace(/[（(][^）)]*初期設定[^）)]*[）)]/, '').trim();
+
+  function renderField(fid) {
+    const f = fieldOf(fid);
+    const def = f.advanced && f.default != null && !Array.isArray(f.default) ? defaultLabel(fid) : '';
+    return `<section class="field ${f.advanced ? 'is-adv' : ''}" id="field-${fid}">
+      <div class="field-head">
+        <h3>${esc(f.label)}${f.advanced ? ' <span class="adv-tag" title="初心者は最初は触らなくてOKな項目です">上級</span>' : ''}</h3>
+        <button class="i-btn" data-action="help" data-field="${fid}" aria-label="${esc(f.label)}の解説を見る">i</button>
+      </div>
+      <p class="field-summary">${esc(f.summary)}</p>
+      ${def ? `<p class="adv-default">迷ったら：初期設定「${esc(def)}」のままでOK</p>` : ''}
+      <div class="field-body">${renderFieldBody(fid)}</div>
+    </section>`;
+  }
+
+  function rerenderField(fid) {
+    const body = $(`#field-${fid} .field-body`);
+    if (body) body.innerHTML = renderFieldBody(fid);
+  }
+
+  function renderFieldBody(fid) {
+    const f = fieldOf(fid), v = state.answers[fid];
+    switch (f.type) {
+      case 'single':
+      case 'multi': {
+        const type = f.type === 'single' ? 'radio' : 'checkbox';
+        const checked = o => f.type === 'single' ? v === o.value : v.includes(o.value);
+        if (f.layout === 'typecards') return renderTypeCards(fid, f, v);
+        if (f.layout === 'tiles') {
+          return `<div class="tiles">${f.options.map(o => `
+            <label class="tile">
+              <input type="${type}" name="f-${fid}" value="${esc(o.value)}" data-field="${fid}" ${checked(o) ? 'checked' : ''}>
+              <span class="tile-check" aria-hidden="true">✓</span>
+              <span class="tile-icon" aria-hidden="true">${icon(o.icon)}</span>
+              <span class="tile-label">${esc(o.label)}</span>
+              ${showDesc() ? `<span class="tile-desc">${esc(o.desc)}</span>` : ''}
+            </label>`).join('')}</div>`;
+        }
+        return `<div class="opts ${f.type === 'multi' ? 'multi' : ''}">${f.options.map(o => `
+          <label class="opt">
+            <input type="${type}" name="f-${fid}" value="${esc(o.value)}" data-field="${fid}" ${checked(o) ? 'checked' : ''}>
+            <span class="opt-main"><span class="opt-label">${esc(o.label)}</span>${showDesc() ? `<span class="opt-desc">${esc(o.desc)}</span>` : ''}</span>
+          </label>`).join('')}</div>`;
+      }
+      case 'keywords':
+        return renderKeywords(v);
+      case 'textlist':
+        return `<div class="lines">${v.map((t, i) => renderLine(fid, t, i)).join('')}</div>
+          <div class="lines-foot">
+            <span class="count-info" id="count-${fid}">${countInfo(fid)}</span>
+            ${v.length < f.max ? `<button type="button" class="btn-ghost sm" data-action="add-line" data-field="${fid}">＋ 追加</button>` : ''}
+          </div>`;
+      case 'number':
+        return `<div class="num-wrap">
+            <input type="number" inputmode="numeric" min="0" step="100" value="${v ?? ''}" data-field="${fid}" placeholder="例：3000" aria-label="${esc(f.label)}">
+            <span class="unit" id="unit-${fid}">${esc(unitOf(fid))}</span>
+          </div>
+          <p class="num-help" id="num-help-${fid}">${budgetHelp(fid, v)}</p>`;
+    }
+    return '';
+  }
+
+  function renderTypeCards(fid, f, v) {
+    let h = `<div class="typecards">${f.options.map(o => {
+      const g = o.guide;
+      const ready = !D.flows || D.flows[o.value];
+      return `<div class="typecard ${v === o.value ? 'on' : ''}">
+        <label class="tc-main">
+          <input type="radio" name="f-${fid}" value="${esc(o.value)}" data-field="${fid}" ${v === o.value ? 'checked' : ''}>
+          <span class="tc-icon" aria-hidden="true">${icon(o.icon, 28)}</span>
+          <span class="tc-text"><span class="tc-label">${esc(o.label)}${ready ? '' : ' <small class="tag tag-level">準備中</small>'}</span>
+            ${showDesc() ? `<span class="tc-desc">${esc(o.desc)}</span>` : ''}</span>
+          <span class="tile-check" aria-hidden="true">✓</span>
+        </label>
+        ${g ? `<details class="tc-guide"><summary>どんなときに使う？</summary>
+          <dl>
+            <dt>👍 おすすめの場面</dt><dd>${esc(g.when)}</dd>
+            <dt>🏢 向いている業種・目的の例</dt><dd>${esc(g.examples)}</dd>
+            <dt>🙅 向いていないケース</dt><dd>${esc(g.notFor)}</dd>
+          </dl></details>` : ''}
+      </div>`;
+    }).join('')}</div>`;
+    if (state.scenario && state.typeCommitted) {
+      h += `<p class="type-locked">🔒 採点は、最初に「次へ」を押したときのタイプ「${esc(optLabel(fid, state.typeCommitted))}」で行います。</p>`;
+    } else if (!state.scenario) {
+      h += `<p class="type-locked">タイプを選ぶと、そのタイプ専用の設定ステップが追加されます。</p>`;
+    }
+    return h;
+  }
+
+  function renderKeywords(v) {
+    const cands = kwCandidates();
+    let h = state.scenario ? '' : `<p class="kw-context">${esc(D.freeKeywords.context)}</p>`;
+    h += `<ul class="kw-list">${cands.map((k, i) => {
+      const sel = v[i];
+      let fb = '';
+      if (!state.scenario && sel) {
+        const g = gradeKw(k, sel);
+        fb = `<p class="kw-fb ${g}">${MARK[g].sym} おすすめ：<strong>${KW_LABEL[k.ans]}</strong>　${esc(k.reason)}</p>`;
+      }
+      return `<li class="kw-row">
+        <div class="kw-top">
+          <span class="kw-text">${esc(k.kw)}</span>
+          <div class="seg" role="group" aria-label="${esc(k.kw)}の扱い">${['add', 'negative', 'skip'].map(val =>
+            `<button type="button" class="seg-btn seg-${val} ${sel === val ? 'on' : ''}" data-action="kw-set" data-i="${i}" data-val="${val}" aria-pressed="${sel === val}">${KW_LABEL[val]}</button>`).join('')}</div>
+        </div>${fb}</li>`;
+    }).join('')}</ul>`;
+    if (!state.scenario) h += renderCustomKw();
+    return h;
+  }
+
+  function renderCustomKw() {
+    return `<div class="ckw">
+      <h4>自分でキーワードを追加してみる <small>（マッチタイプの書き方の練習）</small></h4>
+      <div class="ckw-form">
+        <input type="text" id="ckw-text" placeholder="例：新宿 パーソナルジム 女性" aria-label="キーワード">
+        <select id="ckw-match" aria-label="マッチタイプ">${Object.entries(MATCH).map(([k, m]) => `<option value="${k}">${m.label}</option>`).join('')}</select>
+        <button type="button" class="btn-ghost" data-action="ckw-add">追加</button>
+      </div>
+      <ul class="ckw-list">${state.customKw.map((c, i) => `
+        <li><code>${esc(MATCH[c.match].note(c.text))}</code><span>${esc(MATCH[c.match].desc(c.text))}</span>
+          <button type="button" class="x" data-action="ckw-remove" data-i="${i}" aria-label="削除">×</button></li>`).join('')}</ul>
+    </div>`;
+  }
+
+  function ccClass(f, w) {
+    if (w <= f.limit) return '';
+    return f.soft ? 'soft-over' : 'over';
+  }
+
+  function renderLine(fid, text, i) {
+    const f = fieldOf(fid), w = textWidth(f, text), n = state.answers[fid].length;
+    return `<div class="line">
+      <span class="line-no">${i + 1}</span>
+      <input type="text" value="${esc(text)}" placeholder="${i === 0 ? esc(f.placeholder) : ''}" data-field="${fid}" data-i="${i}" aria-label="${esc(f.label)} ${i + 1}">
+      <span class="cc ${ccClass(f, w)}" id="cc-${fid}-${i}">${w}/${f.limit}</span>
+      ${n > 1 ? `<button type="button" class="x" data-action="remove-line" data-field="${fid}" data-i="${i}" aria-label="${i + 1}本目を削除">×</button>` : ''}
+    </div>`;
+  }
+
+  function countInfo(fid) {
+    const f = fieldOf(fid);
+    const filled = state.answers[fid].map(s => s.trim()).filter(Boolean);
+    const valid = validLines(fid).length;
+    let t = `${valid}本 入力済み（最大${f.max}本）`;
+    if (f.soft) {
+      const over = filled.filter(s => textWidth(f, s) > f.limit).length;
+      if (over) t += ` <span class="soft">※推奨の${f.limit}文字を超えた文が${over}本あります（表示が途中で省略されます）</span>`;
+    } else if (filled.length > valid) {
+      t += ` <span class="warn">※文字数オーバーが${filled.length - valid}本あります</span>`;
+    }
+    return t;
+  }
+
+  function unitOf(fid) {
+    const f = fieldOf(fid);
+    return (f.unitBy && f.units && f.units[state.answers[f.unitBy]]) || f.unit;
+  }
+
+  function budgetHelp(fid, v) {
+    const f = fieldOf(fid);
+    if (!v) return esc(f.hint || '計算式：月の予算 ÷ 30.4 ＝ 1日の平均予算');
+    if (state.scenario && !state.showHints) return `${esc(f.label)}を入力しました。`;
+    if (f.unitBy && state.answers[f.unitBy] === 'lifetime') {
+      return `設定した期間全体で約${fmt(v)}円を使い切るように、日ごとの配信額が自動で調整されます。`;
+    }
+    return `1か月の費用の上限目安：約${fmt(v * 30.4)}円 ／ 1日に使われる可能性がある最大額：約${fmt(v * (f.maxDayRate || 2))}円`;
+  }
+
+  /* ---------- ad preview ---------- */
+  function renderPreviewCard() {
+    if (PV().type === 'meta') {
+      return `<div class="preview-panel">
+        <div class="pv-head"><h3>広告プレビュー</h3>
+          <div class="pv-tabs" role="tablist">
+            <button type="button" class="pv-tab ${state.previewPlacement === 'feed' ? 'on' : ''}" data-action="pv-place" data-val="feed" role="tab">フィード</button>
+            <button type="button" class="pv-tab ${state.previewPlacement === 'story' ? 'on' : ''}" data-action="pv-place" data-val="story" role="tab">ストーリーズ</button>
+            ${state.answers.conversionLocation === 'instant_form' ? `<button type="button" class="pv-tab ${state.previewPlacement === 'form' ? 'on' : ''}" data-action="pv-place" data-val="form" role="tab">フォーム</button>` : ''}
+          </div></div>
+        <div id="ad-preview"></div>
+        <div class="end-actions" style="margin:10px 0 0;justify-content:center"><button type="button" class="btn-ghost sm" data-action="shuffle-preview">テキストの組み合わせを変える</button></div>
+      </div>`;
+    }
+    const P = PREVIEWS[PV().type];
+    return `<section class="field">
+      <div class="field-head"><h3>広告プレビュー</h3>
+        <button type="button" class="btn-ghost sm" data-action="shuffle-preview">組み合わせを変える</button></div>
+      <p class="field-summary">${esc(P.note)}</p>
+      <div id="ad-preview" class="${P.cls || ''}"></div>
+    </section>`;
+  }
+
+  function updatePreview() {
+    const el = $('#ad-preview');
+    if (!el || !PV()) return;
+    el.innerHTML = PREVIEWS[PV().type].render();
+  }
+
+  const scDomain = () => state.scenario && state.scenario.domain ? state.scenario.domain : 'www.example.com';
+  const scBrand = () => state.scenario ? (state.scenario.brand || state.scenario.pageName || 'あなたのブランド') : 'あなたのブランド';
+  const firstChar = t => esc([...String(t).replace(/^（架空）/, '')][0] || 'A');
+  const linesOr = (fid, n) => fieldOf(fid) ? seededShuffle(validLines(fid), state.previewSeed).slice(0, n) : [];
+
+  function googleSearchPreview() {
+    const hs = seededShuffle(validLines('headlines'), state.previewSeed).slice(0, 3);
+    const ds = seededShuffle(validLines('descriptions'), state.previewSeed).slice(0, 2);
+    const domain = scDomain();
+    const assets = state.answers.assets;
+    const ext = [];
+    if (assets.includes('sitelink')) ext.push(...['料金・メニュー', 'よくある質問', 'お客様の声'].map(t => `<span class="link">${t}</span>`));
+    if (assets.includes('callout')) ext.push('<span>・実績多数 ・年中無休</span>');
+    if (assets.includes('call')) ext.push('<span class="link">📞 電話をかける</span>');
+    if (assets.includes('location')) ext.push('<span>📍 店舗の住所</span>');
+    if (assets.includes('price')) ext.push('<span>💴 価格一覧</span>');
+    return `
+      <div class="serp-sp">スポンサー</div>
+      <div class="serp-url"><span class="fav">${esc(domain[0].toUpperCase())}</span><span>${esc(domain)}</span></div>
+      <div class="serp-h">${hs.length ? hs.map(esc).join(' | ') : '<span class="ph">見出しを入力すると、ここに表示されます</span>'}</div>
+      <div class="serp-d">${ds.length ? ds.map(esc).join(' ') : '<span class="ph">説明文を入力すると、ここに表示されます</span>'}</div>
+      ${ext.length ? `<div class="serp-ext">${ext.join('')}</div>` : ''}`;
+  }
+
+  function videoPreview() {
+    const a = state.answers, f = a.vid_formats || [];
+    const hl = linesOr('vid_headline', 1)[0];
+    const brand = scBrand();
+    const len = { '6s': '0:06', '15s': '0:15', long: '2:00', very_long: '5:30' }[a.vid_length] || '0:15';
+    const skip = f.includes('skippable') ? '<span class="yt-skip">5秒後にスキップ ▸</span>'
+      : f.includes('bumper') || f.includes('nonskip') ? '<span class="yt-skip off">スキップできません</span>' : '';
+    const late = a.vid_opening === 'late_reveal';
+    const center = late ? '（最後に商品が登場…）' : a.vid_opening === 'logo_only' ? '（映像のみ・ロゴは右下）' : `${esc(brand)}<small>冒頭で商品を紹介</small>`;
+    return `<div class="yt">
+        <div class="yt-screen"><span class="yt-center">${center}</span>
+          ${a.vid_opening === 'logo_only' ? `<span class="yt-logo">${firstChar(brand)}</span>` : ''}
+          <span class="yt-badge">広告 · ${len}</span>${skip}
+          <div class="yt-bar"><span></span></div>
+        </div>
+        <div class="yt-info">
+          <span class="fb-avatar" style="width:32px;height:32px">${firstChar(brand)}</span>
+          <div><strong>${hl ? esc(hl) : '<span class="ph">見出しを入力すると表示されます</span>'}</strong><small>スポンサー · ${esc(scDomain())}</small></div>
+          <span class="yt-cta">詳しくはこちら</span>
+        </div>
+      </div>
+      ${f.includes('shorts') ? '<p class="pv-note">ショート広告では縦型（9:16）で全画面に表示されます。</p>' : ''}`;
+  }
+
+  function pmaxPreview() {
+    const a = state.answers, assets = a.pmax_assets || [];
+    const hs = linesOr('pmax_headlines', 2), lh = linesOr('pmax_long', 1)[0];
+    const brand = scBrand(), has = k => assets.includes(k);
+    const hl = hs[0] ? esc(hs[0]) : '<span class="ph">見出し</span>';
+    const tiles = [
+      ['検索', `<div class="pm-search"><b>スポンサー</b><span>${esc(scDomain())}</span><em>${hs.length ? hs.map(esc).join(' | ') : '<span class="ph">見出し</span>'}</em></div>`],
+      ['YouTube', `<div class="pm-yt ${has('video') ? '' : 'auto'}">${has('video') ? '▶ 登録した動画' : '▶ 自動生成の動画<small>動画が未登録のため画像から自動作成</small>'}</div>`],
+      ['ディスプレイ', `<div class="pm-disp">${has('images') ? '<div class="pm-img">画像</div>' : '<div class="pm-img none">画像なし</div>'}<div><b>${lh ? esc(lh) : '<span class="ph">長い見出し</span>'}</b><small>${has('business_name') ? esc(brand) : ''}</small></div></div>`],
+      ['Gmail・Discover', `<div class="pm-disp">${has('logo') ? `<span class="fb-avatar" style="width:28px;height:28px">${firstChar(brand)}</span>` : ''}<div><b>${hl}</b><small>スポンサー</small></div></div>`]
+    ];
+    if (a.pmax_feed === 'linked') tiles.push(['ショッピング', '<div class="pm-shop"><div class="pm-img">商品</div><b>商品名</b><span>¥2,980</span></div>']);
+    return `<div class="pm-grid">${tiles.map(([t, h]) => `<div class="pm-tile"><p>${t}</p>${h}</div>`).join('')}</div>`;
+  }
+
+  function displayPreview() {
+    const im = state.answers.disp_images || [];
+    const hs = linesOr('disp_headlines', 1), lh = linesOr('disp_long', 1)[0];
+    const brand = scBrand();
+    const img = (cls, label) => im.includes(cls === 'sq' ? 'square' : 'landscape') || im.includes('text_in_image')
+      ? `<div class="dp-img ${cls} ${im.includes('text_in_image') ? 'texty' : ''}">${im.includes('text_in_image') ? '<span>文字</span><span>文字文字</span><span>文字</span>' : label}</div>`
+      : `<div class="dp-img ${cls} none">画像なし</div>`;
+    const logo = im.includes('logo') ? `<span class="fb-avatar" style="width:24px;height:24px;font-size:10px">${firstChar(brand)}</span>` : '';
+    return `<div class="dp-wrap">
+        <div class="dp-banner">
+          ${img('wide', '横長の画像 1.91:1')}
+          <div class="dp-body"><b>${lh ? esc(lh) : '<span class="ph">長い広告見出し</span>'}</b>
+            <div class="dp-foot">${logo}<small>${esc(brand)}</small><span class="dp-go">›</span></div></div>
+        </div>
+        <div class="dp-small">
+          ${img('sq', '正方形 1:1')}
+          <b>${hs[0] ? esc(hs[0]) : '<span class="ph">見出し</span>'}</b>
+          <div class="dp-foot">${logo}<small>広告</small></div>
+        </div>
+      </div>
+      ${im.includes('text_in_image') ? '<p class="pv-note warn">⚠️ 小さな広告枠では、画像の中の文字が読めなくなります。</p>' : ''}`;
+  }
+
+  function demandgenPreview() {
+    const a = state.answers, fmt = a.dg_format;
+    const hs = linesOr('dg_headlines', 3), d = linesOr('dg_desc', 1)[0];
+    const brand = scBrand();
+    const hl = hs[0] ? esc(hs[0]) : '<span class="ph">見出し</span>';
+    let media;
+    if (fmt === 'carousel') media = `<div class="dg-car">${[0, 1, 2].map(i => `<div class="dg-card"><div class="dg-img">画像${i + 1}</div><b>${hs[i] ? esc(hs[i]) : 'カード' + (i + 1)}</b></div>`).join('')}</div>`;
+    else if (fmt === 'video') media = `<div class="dg-img video">▶ 動画</div>`;
+    else if (fmt === 'product') media = `<div class="dg-img">メイン画像</div><div class="dg-prod">${[1, 2, 3].map(() => '<div><span class="dg-img">商品</span><small>¥3,980</small></div>').join('')}</div>`;
+    else media = `<div class="dg-img">画像</div>`;
+    const feed = `<div class="dg-feed"><p class="dg-place">Discover・Gmail のフィード</p>
+        ${media}
+        <div class="dg-text"><b>${hl}</b>${d ? `<small>${esc(d)}</small>` : ''}
+          <div class="dg-meta"><span class="fb-avatar" style="width:20px;height:20px;font-size:9px">${firstChar(brand)}</span>${esc(brand)} · スポンサー</div></div>
+      </div>`;
+    const shorts = fmt === 'video' ? `<div class="dg-short"><p class="dg-place">YouTube ショート</p><div class="dg-phone"><span class="dg-img video" style="height:100%">縦型動画</span>
+        <div class="dg-sbottom"><b>${hl}</b><span class="story-cta">詳しくはこちら</span></div></div></div>` : '';
+    return `<div class="dg-wrap">${feed}${shorts}</div>`;
+  }
+
+  function shoppingPreview() {
+    const a = state.answers, feed = a.shop_feed || [];
+    const title = linesOr('shop_title', 1)[0];
+    const shown = title ? ([...title].length > 70 ? esc([...title].slice(0, 70).join('')) + '…' : esc(title)) : '<span class="ph">商品タイトル</span>';
+    const promo = feed.includes('promo_title') ? '【激安・送料無料】' : '';
+    const mine = `<div class="sh-card mine">
+        <div class="sh-img">${feed.includes('watermark') ? '<span class="sh-wm">SALE</span>' : ''}商品画像</div>
+        <b>${promo}${shown}</b><span class="sh-price">¥12,800</span><small>${esc(scBrand())}</small></div>`;
+    const other = n => `<div class="sh-card"><div class="sh-img other">他社の商品</div><b>他社の商品 ${n}</b><span class="sh-price">¥${n === 1 ? '10,980' : '13,200'}</span><small>他のショップ</small></div>`;
+    const warn = a.shop_mc === 'none' ? '⚠️ Merchant Centerがないため、実際には配信できません。'
+      : a.shop_mc === 'pending' ? '⚠️ 審査中・不承認の商品は表示されません。'
+      : feed.includes('promo_title') || feed.includes('watermark') ? '⚠️ 宣伝文句や画像の透かしは、商品が不承認になる原因です。' : '';
+    return `<p class="sh-label">スポンサー · ショッピング</p><div class="sh-row">${mine}${other(1)}${other(2)}</div>${warn ? `<p class="pv-note warn">${warn}</p>` : ''}`;
+  }
+
+  function appPreview() {
+    const a = state.answers, assets = a.app_assets || [];
+    const hs = linesOr('app_texts', 2), d = linesOr('app_desc', 1)[0];
+    const name = scBrand().replace(/^（架空）/, '') || 'あなたのアプリ';
+    const store = a.app_platform === 'ios' ? 'App Store' : 'Google Play';
+    const btn = a.app_subtype === 'engagement' ? '開く' : a.app_subtype === 'pre_reg' ? '事前登録' : 'インストール';
+    const hl = hs[0] ? esc(hs[0]) : '<span class="ph">見出し</span>';
+    const card = `<div class="ap-card"><span class="ap-icon">${firstChar(name)}</span>
+        <div><b>${hl}</b><small>${esc(name)} · 広告 · ★4.5</small>${d ? `<p>${esc(d)}</p>` : ''}</div>
+        <span class="ap-btn">${btn}</span></div>`;
+    const tiles = [`<div class="pm-tile full"><p>検索・${store}</p>${card}</div>`];
+    tiles.push(`<div class="pm-tile"><p>YouTube</p>${assets.includes('video') ? `<div class="pm-yt">▶ アプリの紹介動画</div>` : '<div class="pm-yt auto">動画が未登録<small>YouTubeでの配信機会が減ります</small></div>'}</div>`);
+    tiles.push(`<div class="pm-tile"><p>ディスプレイ</p><div class="pm-disp">${assets.includes('images') ? '<div class="pm-img">画像</div>' : '<div class="pm-img none">画像なし</div>'}<div><b>${hs[1] ? esc(hs[1]) : hl}</b><small>${btn}</small></div></div></div>`);
+    const warn = a.app_platform === 'both' ? '<p class="pv-note warn">⚠️ アプリキャンペーンは、1つのキャンペーンで1つのプラットフォームしか宣伝できません。</p>'
+      : a.app_subtype === 'pre_reg' && a.app_platform === 'ios' ? '<p class="pv-note warn">⚠️ 事前登録キャンペーンはAndroidのみです。</p>' : '';
+    return `<div class="pm-grid">${tiles.join('')}</div>${warn}`;
+  }
+
+  // 広告プレビューの種類（data の preview.type と対応）
+  const PREVIEWS = {
+    google: { cls: 'serp', note: '実際の配信では、Googleが見出しと説明文の組み合わせを自動で入れ替えて表示します。', render: googleSearchPreview },
+    meta: { render: () => metaPreviewHtml() },
+    app: { note: '登録したアセットから、各チャネルの広告が自動で作られるイメージです。プラットフォームと種類の選択も反映されます。', render: appPreview },
+    shopping: { note: '検索結果に表示されるショッピング広告のイメージです。他社の商品と並んで、画像・価格・商品タイトルで比べられます。', render: shoppingPreview },
+    demandgen: { note: 'Discover・Gmailのフィードや、YouTubeショートに表示されるイメージです。広告フォーマットの選択が反映されます。', render: demandgenPreview },
+    display: { note: 'Webサイトやアプリの広告枠に、自動でレイアウトされたイメージです（大きな枠と小さな枠の例）。', render: displayPreview },
+    pmax: { note: '1つのアセットグループの素材から、AIが各チャネルに合わせた広告を自動で作るイメージです。登録する素材の選択が反映されます。', render: pmaxPreview },
+    video: { note: 'YouTubeの動画の前に流れるインストリーム広告のイメージです。フォーマット・動画の長さ・構成の選択が反映されます。', render: videoPreview }
+  };
+
+  function metaPreviewHtml() {
+    const a = state.answers, sc = state.scenario;
+    const page = sc ? sc.pageName : 'あなたのページ';
+    const domain = a.destination === 'instant_form' ? 'インスタントフォーム' : a.destination === 'line_direct' ? 'line.me' : (sc ? sc.domain : 'www.example.com');
+    const pt = seededShuffle(validLines('primaryText'), state.previewSeed)[0];
+    const hl = seededShuffle(validLines('headline'), state.previewSeed)[0];
+    const cta = a.cta ? optLabel('cta', a.cta) : '詳しくはこちら';
+    const initial = esc([...page.replace(/^（架空）/, '')][0] || 'A');
+    const ratio = a.media === 'landscape' ? '16 / 9' : a.media === 'square_only' ? '1 / 1' : '4 / 5';
+    const mediaLabel = a.media === 'landscape' ? '横長 16:9' : a.media === 'square_only' ? '正方形 1:1' : a.media === 'multi_ratio' ? 'フィード用 4:5' : '画像・動画';
+    const textHtml = pt
+      ? (pt.length > 125 ? `${esc(pt.slice(0, 125))}<span class="more">…もっと見る</span>` : esc(pt))
+      : '<span class="ph">メインテキストを入力すると、ここに表示されます</span>';
+    const hlHtml = hl ? esc(hl) : '<span class="ph">見出し</span>';
+    const notes = [];
+    if (a.identity === 'personal') notes.push('<p class="pv-note warn">⚠️ 個人のアカウントからは広告を出せません。Facebookページが必要です。</p>');
+    if (a.identity === 'page_only') notes.push('<p class="pv-note">Instagramでも、Facebookページの名前とアイコンで表示されます。</p>');
+    const existing = a.creativeSource === 'existing';
+    const partner = a.partnership === 'on';
+    const who = partner ? `${esc(page)} <span class="pv-and">と</span> クリエイター` : esc(page);
+    const sub = partner ? 'ペイドパートナーシップ · 広告' : '広告 · 🌐';
+    if (existing) notes.push('<p class="pv-note">既存の投稿を使っています。テキスト・画像は投稿のものが使われ、いいね・コメントも表示されます。</p>');
+    if (partner) notes.push('<p class="pv-note">パートナーシップ広告では、ブランドとクリエイターの両方の名前が表示されます。</p>');
+
+    if (state.previewPlacement === 'form' && a.conversionLocation === 'instant_form') {
+      const items = a.instantFormItems || [];
+      const many = items.includes('too_many');
+      return `<div class="if-form">
+          <div class="if-head"><span class="fb-avatar">${initial}</span><strong>${esc(page)}</strong></div>
+          <p class="if-title">${hl ? esc(hl) : 'お申し込みフォーム'}</p>
+          ${items.includes('prefill') ? `<div class="if-field"><small>氏名</small>山田 花子<span>自動入力</span></div><div class="if-field"><small>電話番号</small>090-0000-0000<span>自動入力</span></div>`
+            : '<div class="if-field empty"><small>氏名</small>（手入力）</div><div class="if-field empty"><small>電話番号</small>（手入力）</div>'}
+          ${items.includes('custom') ? '<div class="if-field empty"><small>独自の質問</small>勤務できる曜日を選んでください</div>' : ''}
+          ${many ? '<div class="if-field empty"><small>質問 3〜12</small>…（質問が続きます）</div>' : ''}
+          ${items.includes('privacy') ? '<p class="if-privacy">プライバシーポリシー</p>' : '<p class="pv-note warn">⚠️ プライバシーポリシーのリンクがないと、フォームを公開できません。</p>'}
+          ${a.instantFormType === 'higher_intent' ? '<p class="if-step">送信前に、入力内容の確認画面が表示されます</p>' : ''}
+          <span class="if-submit">${a.instantFormType === 'higher_intent' ? '確認する' : '送信'}</span>
+          ${items.includes('thanks') ? '<p class="if-step">送信後：完了画面で次の行動を案内</p>' : ''}
+        </div>`;
+    }
+
+    if (state.previewPlacement === 'story') {
+      let media, note = '';
+      if (a.media === 'square_only') { media = `<div class="fb-media" style="aspect-ratio:1/1">正方形 1:1</div>`; note = '⚠️ 9:16の素材がないため、上下に余白ができています。'; }
+      else if (a.media === 'landscape') { media = `<div class="fb-media" style="aspect-ratio:16/9">横長 16:9</div>`; note = '⚠️ 横長の素材は、縦長の画面では小さく表示されます。'; }
+      else { media = `<div class="fb-media" style="height:100%">ストーリーズ用 9:16</div>`; }
+      return `<div class="story">
+          ${media}
+          <div class="story-top"><span class="fb-avatar">${initial}</span><span><strong>${who}</strong> · ${partner ? 'ペイドパートナーシップ' : '広告'}</span></div>
+          <div class="story-bottom">${pt ? `<p>${esc(pt)}</p>` : ''}<span class="story-cta">${esc(cta)}</span></div>
+        </div>
+        ${note ? `<p class="pv-note warn">${note}</p>` : ''}${notes.join('')}`;
+    }
+
+    let mediaHtml;
+    if (a.format === 'carousel') {
+      const caps = [hl || 'カード1', 'カード2', 'カード3'];
+      mediaHtml = `<div class="fb-carousel">${caps.map(c => `<div class="fb-card"><div class="fb-media">画像</div><div class="fb-cap">${esc(c)}</div></div>`).join('')}</div>`;
+    } else if (a.format === 'collection') {
+      mediaHtml = `<div class="fb-media" style="aspect-ratio:${ratio}">メインの画像・動画</div>
+        <div class="fb-collection"><div class="fb-media">商品</div><div class="fb-media">商品</div><div class="fb-media">商品</div></div>`;
+    } else {
+      mediaHtml = `<div class="fb-media" style="aspect-ratio:${ratio}">${mediaLabel}</div>`;
+    }
+    return `<div class="fb-post">
+        <div class="fb-head"><span class="fb-avatar">${initial}</span><div><strong>${who}</strong><small>${sub}</small></div></div>
+        <div class="fb-text">${existing ? '（既存の投稿の本文）' : textHtml}</div>
+        ${existing ? '<div class="fb-media" style="aspect-ratio:4/5">既存の投稿の画像・動画</div>' : mediaHtml}
+        ${a.format === 'carousel' ? `<div class="fb-foot"><div><small>${esc(domain)}</small></div><span class="fb-cta">${esc(cta)}</span></div>`
+          : `<div class="fb-foot"><div><small>${esc(domain)}</small><strong>${existing ? '' : hlHtml}</strong></div><span class="fb-cta">${esc(cta)}</span></div>`}
+        ${existing ? '<div class="fb-react">👍❤️ 1,248　　コメント86件　シェア32件</div>' : ''}
+      </div>${notes.join('')}`;
+  }
+
+  /* ---------- review ---------- */
+  function valueText(fid) {
+    const f = fieldOf(fid), v = answerOf(fid);
+    switch (f.type) {
+      case 'single': return v ? optLabel(fid, v) : '未選択';
+      case 'multi':  return v.length ? v.map(x => optLabel(fid, x)).join('、') : '未選択';
+      case 'keywords': {
+        const c = { add: 0, negative: 0, skip: 0 };
+        const vals = Object.values(v);
+        vals.forEach(x => c[x]++);
+        const rest = kwCandidates().length - vals.length;
+        if (!vals.length) return '未選択';
+        return `追加 ${c.add}・除外 ${c.negative}・使わない ${c.skip}${rest ? `（未選択 ${rest}）` : ''}`;
+      }
+      case 'textlist': { const n = validLines(fid).length; return n ? `${n}本` : '未入力'; }
+      case 'number':   return v ? `${fmt(v)} ${unitOf(fid)}` : '未入力';
+    }
+    return '';
+  }
+
+  function stepLabel(s) {
+    const lv = levelOf(s);
+    return `${lv ? esc(lv.label) + '｜' : ''}${S().indexOf(s) + 1}. ${esc(s.title)}`;
+  }
+
+  function renderReview() {
+    const steps = S().filter(s => s.fields.length);
+    const missing = steps.flatMap(s => s.fields).filter(fid => !isAnswered(fid)).length;
+    let html = steps.map(s => `<section class="field">
+        <div class="field-head"><h3>${stepLabel(s)}</h3>
+          <button type="button" class="btn-ghost sm" data-action="goto-step" data-step="${S().indexOf(s)}">修正する</button></div>
+        <dl class="review-list">${s.fields.map(fid =>
+          `<dt>${esc(fieldOf(fid).label)}${fieldOf(fid).advanced ? ' <span class="adv-tag">上級</span>' : ''}</dt><dd class="${!visible(fid) ? 'na' : isAnswered(fid) ? '' : 'empty'}">${visible(fid) ? esc(valueText(fid)) : '（この設定では対象外）'}</dd>`).join('')}</dl>
+      </section>`).join('');
+    if (state.scenario) {
+      if (missing) html += `<div class="warn-box">⚠️ 未回答の項目が${missing}つあります。未回答のまま採点すると×になります。</div>`;
+      html += `<button type="button" class="btn-primary block" data-action="grade">採点する</button>`;
+    } else {
+      html += `<div class="end-actions">
+        <button type="button" class="btn-primary" data-action="start-free">最初からやり直す</button>
+        <button type="button" class="btn-ghost" data-action="home">シナリオに挑戦する</button>
+      </div>`;
+    }
+    return html;
+  }
+
+  /* ---------- grading ---------- */
+  function gradeKw(k, sel) {
+    if (sel === k.ans) return 'good';
+    return (k.ok || []).includes(sel) ? 'ok' : 'bad';
+  }
+
+  function gradeField(fid) {
+    const f = fieldOf(fid), a = scAnswer(fid), v = answerOf(fid);
+    if (!a || !visible(fid)) return null;
+    switch (f.type) {
+      case 'single':
+        return { mark: a.best.includes(v) ? 'good' : (a.ok || []).includes(v) ? 'ok' : 'bad' };
+      case 'multi': {
+        const best = a.best || [], bad = a.bad || [];
+        const missing = best.filter(x => !v.includes(x));
+        const wrong = v.filter(x => bad.includes(x));
+        const ratio = best.length ? (best.length - missing.length) / best.length : 1;
+        const mark = (!missing.length && !wrong.length) ? 'good' : (ratio >= 0.5 && wrong.length <= 1) ? 'ok' : 'bad';
+        return { mark, missing, wrong };
+      }
+      case 'keywords': {
+        const rows = kwCandidates().map((k, i) => ({ k, sel: v[i], g: v[i] ? gradeKw(k, v[i]) : 'bad' }));
+        const score = rows.reduce((s, r) => s + (r.g === 'good' ? 1 : r.g === 'ok' ? 0.5 : 0), 0) / rows.length;
+        return { mark: score >= 0.85 ? 'good' : score >= 0.6 ? 'ok' : 'bad', rows };
+      }
+      case 'textlist': {
+        const n = validLines(fid).length;
+        return { mark: n >= a.min ? 'good' : n >= a.okMin ? 'ok' : 'bad' };
+      }
+      case 'number': {
+        const r = a.ranges ? a.ranges[state.answers[f.unitBy]] : a;
+        if (!r) return { mark: 'bad' };
+        const x = Number(v) || 0;
+        const mark = (x >= r.min && x <= r.max) ? 'good' : (x >= r.min * 0.7 && x <= r.max * 1.3) ? 'ok' : 'bad';
+        return { mark };
+      }
+    }
+    return null;
+  }
+
+  function modelText(fid) {
+    const f = fieldOf(fid), a = scAnswer(fid);
+    const labels = arr => arr.map(x => optLabel(fid, x)).join('、');
+    switch (f.type) {
+      case 'single': return labels(a.best) + (a.ok && a.ok.length ? `（△：${labels(a.ok)}）` : '');
+      case 'multi':  return labels(a.best) + (a.ok && a.ok.length ? `（あると良い：${labels(a.ok)}）` : '');
+      case 'textlist': return `${a.min}本以上`;
+      case 'number':
+        if (a.ranges) return Object.entries(a.ranges).map(([k, r]) => `${optLabel(f.unitBy, k)}なら ${fmt(r.min)}〜${fmt(r.max)}円`).join(' ／ ');
+        return `${fmt(a.min)}〜${fmt(a.max)} ${f.unit}`;
+    }
+    return '';
+  }
+
+  function renderResult() {
+    const sc = state.scenario;
+    const groups = [];
+    for (const s of S()) {
+      const items = s.fields.map(fid => ({ fid, a: scAnswer(fid), ...gradeField(fid) })).filter(it => it.mark);
+      if (items.length) groups.push({ step: s, items });
+    }
+    const all = groups.flatMap(g => g.items);
+    const weight = it => it.a.weight || 1;
+    const got = all.reduce((s, it) => s + MARK[it.mark].pt * weight(it), 0);
+    const max = all.reduce((s, it) => s + 2 * weight(it), 0);
+    const pct = Math.round(got / max * 100);
+    const cnt = { good: 0, ok: 0, bad: 0 };
+    all.forEach(it => cnt[it.mark]++);
+    const criticalMiss = all.filter(it => it.a.critical && it.mark !== 'good');
+    const comment =
+      pct >= 90 ? 'すばらしい！実務でも通用する設定です。' :
+      pct >= 70 ? 'よくできました。△と×の理由を確認して仕上げましょう。' :
+      pct >= 50 ? 'あと一歩です。×の項目の解説を読み直してみましょう。' :
+                  '解説を読みながら、もう一度挑戦してみましょう。';
+
+    let html = `
+      <div class="score-card">
+        <div class="ring" style="--p:${pct}"><span>${pct}<small>点</small></span></div>
+        <div class="score-info">
+          <p class="res-pf">${esc(D.info.name)}｜${esc(sc.category)}</p>
+          <h2>${esc(sc.icon)} ${esc(sc.title)}</h2>
+          <p class="comment">${comment}</p>
+          <div class="counts">
+            <span class="count good">◎ 正解 ${cnt.good}</span>
+            <span class="count ok">△ 惜しい ${cnt.ok}</span>
+            <span class="count bad">× 見直し ${cnt.bad}</span>
+          </div>
+        </div>
+      </div>
+      ${criticalMiss.map(it => `<div class="critical-box"><strong>⚠️ 重要項目「${esc(fieldOf(it.fid).label)}」を間違えています。</strong><br>${esc(it.a.criticalNote || '')}</div>`).join('')}
+      <div class="result-actions">
+        <button type="button" class="btn-primary" data-action="retry">同じお題にもう一度挑戦</button>
+        <button type="button" class="btn-ghost" data-action="review">設定を見直す</button>
+        <button type="button" class="btn-ghost" data-action="home">別のシナリオを選ぶ</button>
+      </div>`;
+
+    for (const g of groups) {
+      html += `<p class="res-step">${stepLabel(g.step)}</p>`;
+      for (const it of g.items) {
+        const f = fieldOf(it.fid), a = it.a;
+        let body;
+        if (f.type === 'keywords') {
+          body = `<table class="kw-table"><thead><tr><th></th><th>キーワード</th><th>あなた</th><th>正解</th></tr></thead><tbody>
+            ${it.rows.map(r => `<tr>
+              <td class="m ${r.g}">${MARK[r.g].sym}</td>
+              <td>${esc(r.k.kw)}<span class="r">${esc(r.k.reason)}</span></td>
+              <td>${r.sel ? KW_LABEL[r.sel] : '未選択'}</td>
+              <td>${KW_LABEL[r.k.ans]}${r.k.ok && r.k.ok.length ? `<span class="r">△：${r.k.ok.map(x => KW_LABEL[x]).join('、')}</span>` : ''}</td>
+            </tr>`).join('')}
+          </tbody></table>`;
+        } else {
+          body = `<dl class="res-rows">
+            <dt>あなたの設定</dt><dd>${esc(valueText(it.fid))}</dd>
+            <dt>模範解答</dt><dd>${esc(modelText(it.fid))}</dd>
+            ${it.missing && it.missing.length ? `<dt>足りない</dt><dd>${esc(it.missing.map(x => optLabel(it.fid, x)).join('、'))}</dd>` : ''}
+            ${it.wrong && it.wrong.length ? `<dt>不要</dt><dd>${esc(it.wrong.map(x => optLabel(it.fid, x)).join('、'))}</dd>` : ''}
+          </dl>`;
+        }
+        html += `<article class="res-item ${it.mark}">
+          <div class="res-head">
+            <span class="mark ${it.mark}">${MARK[it.mark].sym} ${MARK[it.mark].text}</span>
+            <h3>${esc(f.label)}</h3>
+            ${a.critical ? `<span class="tag tag-warn">重要項目（配点×${a.weight || 1}）</span>` : ''}
+            <button class="i-btn" data-action="help" data-field="${it.fid}" aria-label="${esc(f.label)}の解説を見る">i</button>
+          </div>
+          ${body}
+          <p class="reason">💡 ${esc(a.reason)}</p>
+        </article>`;
+      }
+    }
+    html += `<div class="result-actions" style="margin-bottom:40px">
+        <button type="button" class="btn-primary" data-action="retry">同じお題にもう一度挑戦</button>
+        <button type="button" class="btn-ghost" data-action="home">別のシナリオを選ぶ</button>
+      </div>`;
+    $('#view-result').innerHTML = html;
+  }
+
+  /* ---------- 広告を出す前の準備（ガイド） ---------- */
+  const prepKey = id => `adsTrainer.prep.${state.platform}.${id}`;
+  function prepChecked(id) {
+    try { return localStorage.getItem(prepKey(id)) === '1'; } catch (e) { return false; }
+  }
+
+  function renderGuide() {
+    const g = D.guide;
+    const done = g.checklist.filter(c => prepChecked(c.id)).length;
+    $('#view-guide').innerHTML = `
+      <div class="hero"><p class="step-count">${esc(D.info.name)}</p><h1>${esc(g.title)}</h1><p>${esc(g.intro)}</p></div>
+      <section class="field">
+        <div class="field-head"><h3>✅ 準備チェックリスト</h3><span class="tag" id="prep-count">${done} / ${g.checklist.length} 完了</span></div>
+        <p class="field-summary">チェックした内容は、このブラウザに保存されます。</p>
+        <ul class="prep-list">${g.checklist.map(c => `
+          <li><label><input type="checkbox" data-role="prep-check" data-id="${esc(c.id)}" ${prepChecked(c.id) ? 'checked' : ''}><span>${esc(c.text)}</span></label>
+            <button type="button" class="btn-ghost sm" data-action="guide-jump" data-id="${esc(c.section)}">解説</button></li>`).join('')}</ul>
+      </section>
+      <nav class="filter-chips guide-toc" aria-label="目次">${g.sections.map(x => `<button class="chip" data-action="guide-jump" data-id="${esc(x.id)}">${x.icon} ${esc(x.title.replace(/（.*?）/g, ''))}</button>`).join('')}</nav>
+      ${g.sections.map((x, i) => `
+        <section class="field guide-sec" id="guide-${esc(x.id)}">
+          <p class="step-count">${i + 1} / ${g.sections.length}</p>
+          <h2 class="guide-title">${x.icon} ${esc(x.title)}</h2>
+          <p class="guide-summary">${esc(x.summary)}</p>
+          <h3>🎯 何をするもの？</h3><p>${esc(x.what)}</p>
+          <h3>❓ なぜ必要？</h3><p>${esc(x.why)}</p>
+          <h3>🧭 手順</h3><ol class="guide-steps">${x.steps.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
+          <div class="tip"><strong>💡 ポイント</strong><ul>${x.points.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>
+          <h3>⚠️ よくある失敗</h3><ul class="mistakes">${x.mistakes.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+        </section>`).join('')}
+      <p class="note">※ 画面の名称や手順は、Metaのアップデートで変わることがあります。実際の設定は公式ヘルプも確認してください。</p>
+      <div class="end-actions" style="margin-bottom:40px">
+        <button type="button" class="btn-primary" data-action="start-free">自由練習を始める</button>
+        <button type="button" class="btn-ghost" data-action="home">ホームに戻る</button>
+      </div>`;
+  }
+
+  /* ---------- quiz ---------- */
+  function startQuiz() {
+    const items = seededShuffle(D.quiz, Math.floor(Math.random() * 1e9) + 1).slice(0, QUIZ_LEN);
+    state.quiz = { items, idx: 0, results: [], picked: null };
+    show('quiz');
+    renderQuiz();
+  }
+
+  function quizMark(item, v) {
+    if (v === item.answer) return 'good';
+    return (item.ok || []).includes(v) ? 'ok' : 'bad';
+  }
+
+  function renderQuiz() {
+    const qz = state.quiz, el = $('#view-quiz');
+    const types = fieldOf(D.typeField).options;
+    const N = qz.items.length;
+    if (qz.idx >= N) {
+      const pts = qz.results.reduce((s, r) => s + (r.mark === 'good' ? 1 : r.mark === 'ok' ? 0.5 : 0), 0);
+      const pct = Math.round(pts / N * 100);
+      el.innerHTML = `
+        <div class="score-card">
+          <div class="ring" style="--p:${pct}"><span>${pct}<small>点</small></span></div>
+          <div class="score-info"><p class="res-pf">${esc(D.info.name)}｜クイズ</p><h2>キャンペーンタイプ選びの結果</h2>
+            <p class="comment">${pct >= 90 ? 'すばらしい！タイプの使い分けがしっかり身についています。' : pct >= 70 ? 'よくできました。間違えた問題の理由を見直しましょう。' : '各タイプの「どんなときに使う？」を読み直して、もう一度挑戦してみましょう。'}</p>
+            <div class="counts"><span class="count good">◎ ${qz.results.filter(r => r.mark === 'good').length}</span><span class="count ok">△ ${qz.results.filter(r => r.mark === 'ok').length}</span><span class="count bad">× ${qz.results.filter(r => r.mark === 'bad').length}</span></div>
+          </div>
+        </div>
+        <div class="result-actions">
+          <button type="button" class="btn-primary" data-action="start-quiz">別の問題でもう一度</button>
+          <button type="button" class="btn-ghost" data-action="home">ホームに戻る</button>
+        </div>
+        ${qz.items.map((it, i) => {
+          const r = qz.results[i];
+          return `<article class="res-item ${r.mark}">
+            <div class="res-head"><span class="mark ${r.mark}">${MARK[r.mark].sym} ${MARK[r.mark].text}</span><h3>Q${i + 1}. ${esc(it.q)}</h3></div>
+            <dl class="res-rows"><dt>あなたの回答</dt><dd>${esc(optLabel(D.typeField, r.choice))}</dd><dt>正解</dt><dd>${esc(optLabel(D.typeField, it.answer))}${it.ok && it.ok.length ? `（△：${esc(it.ok.map(v => optLabel(D.typeField, v)).join('、'))}）` : ''}</dd></dl>
+            <p class="reason">💡 ${esc(it.reason)}</p>
+          </article>`;
+        }).join('')}
+        <div style="height:40px"></div>`;
+      return;
+    }
+    const it = qz.items[qz.idx];
+    const picked = qz.picked;
+    const mark = picked ? quizMark(it, picked) : null;
+    el.innerHTML = `
+      <div class="quiz-top">
+        <p class="step-count">QUESTION ${qz.idx + 1} / ${N}</p>
+        <div class="quiz-bar"><span style="width:${(qz.idx + (picked ? 1 : 0)) / N * 100}%"></span></div>
+      </div>
+      <section class="field quiz-q">
+        <p class="quiz-label">お題</p>
+        <h2>${esc(it.q)}</h2>
+        ${it.hints && it.hints.length ? `<ul class="quiz-hints">${it.hints.map(h => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
+        <p class="quiz-ask">どのキャンペーンタイプを選びますか？</p>
+        <div class="quiz-choices">${types.map(o => {
+          let cls = '';
+          if (picked) {
+            if (o.value === it.answer) cls = 'correct';
+            else if ((it.ok || []).includes(o.value)) cls = 'partial';
+            else if (o.value === picked) cls = 'wrong';
+          }
+          return `<button type="button" class="quiz-choice ${cls} ${o.value === picked ? 'picked' : ''}" data-action="quiz-pick" data-val="${o.value}" ${picked ? 'disabled' : ''}>
+            <span class="tc-icon">${icon(o.icon, 26)}</span><span>${esc(o.label)}</span></button>`;
+        }).join('')}</div>
+      </section>
+      ${picked ? `<section class="quiz-fb ${mark}">
+          <p class="quiz-verdict">${MARK[mark].sym} ${mark === 'good' ? '正解！' : mark === 'ok' ? '惜しい！（選択肢としては有力です）' : '不正解'}</p>
+          <p><strong>正解：${esc(optLabel(D.typeField, it.answer))}</strong></p>
+          <p>${esc(it.reason)}</p>
+          ${mark !== 'good' && it.others && it.others[picked] ? `<p class="quiz-why">あなたが選んだ「${esc(optLabel(D.typeField, picked))}」について：${esc(it.others[picked])}</p>` : ''}
+          ${it.others ? `<details class="tc-guide" style="margin:10px 0 0"><summary>他のタイプが最適ではない理由</summary><dl>${Object.entries(it.others).map(([k, v]) => `<dt>${esc(optLabel(D.typeField, k))}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>` : ''}
+          <div class="end-actions" style="margin:16px 0 0"><button type="button" class="btn-primary" data-action="quiz-next">${qz.idx + 1 < N ? '次の問題へ →' : '結果を見る'}</button></div>
+        </section>` : ''}`;
+  }
+
+  /* ---------- modal ---------- */
+  let lastFocus = null;
+  function openHelp(fid) {
+    const f = fieldOf(fid), h = f.help || {};
+    let html = `<h2 id="modal-title">${esc(f.label)}${f.advanced ? ' <span class="adv-tag">上級</span>' : ''}</h2>
+      ${f.advanced ? `<p class="adv-note">初心者は最初は触らなくてOKな項目です。${f.default != null && !Array.isArray(f.default) ? `初期設定は「${esc(defaultLabel(fid))}」です。` : ''}</p>` : ''}
+      <h3>🎯 役割</h3><p>${esc(h.role)}</p>
+      ${h.when ? `<h3>🕐 どういうときに使う？</h3><p>${esc(h.when)}</p>` : ''}`;
+    if (f.options && f.options.length) {
+      html += `<h3>🔀 選択肢ごとの違い</h3>
+        <dl class="opt-diff">${f.options.map(o => `<dt>${esc(o.label)}</dt><dd>${esc(o.desc)}${o.guide ? `
+          <span class="guide-mini"><b>おすすめ：</b>${esc(o.guide.when)}<br><b>例：</b>${esc(o.guide.examples)}<br><b>向かない：</b>${esc(o.guide.notFor)}</span>` : ''}</dd>`).join('')}</dl>`;
+    }
+    if (h.mistakes && h.mistakes.length) {
+      html += `<h3>⚠️ よくある失敗</h3><ul class="mistakes">${h.mistakes.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
+    }
+    if (h.tip) html += `<div class="tip"><strong>💡 ポイント</strong>${esc(h.tip)}</div>`;
+    $('#modal-body').innerHTML = html;
+    lastFocus = document.activeElement;
+    $('#modal').hidden = false;
+    $('.modal-dialog').scrollTop = 0;
+    document.body.classList.add('modal-open');
+    $('#modal-close').focus();
+  }
+
+  function closeModal() {
+    $('#modal').hidden = true;
+    document.body.classList.remove('modal-open');
+    if (lastFocus) lastFocus.focus();
+  }
+
+  /* ---------- custom keywords ---------- */
+  function addCustomKw() {
+    const input = $('#ckw-text');
+    const text = input.value.trim().replace(/^["\[]+|["\]]+$/g, '');
+    if (!text) return;
+    state.customKw.push({ text, match: $('#ckw-match').value });
+    rerenderField('keywords');
+    $('#ckw-text').focus();
+  }
+
+  /* ---------- events ---------- */
+  function refreshProgress() {
+    renderStepper();
+    renderTree();
+  }
+
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-action]');
+    if (!t) return;
+    const fid = t.dataset.field;
+    switch (t.dataset.action) {
+      case 'home':
+        if (!$('#view-wizard').hidden && hasProgress() && !confirm('入力内容は失われます。ホームに戻りますか？')) return;
+        renderHome();
+        show('home');
+        break;
+      case 'platform':
+        setPlatform(t.dataset.id);
+        renderHome();
+        break;
+      case 'start-free': start(null); break;
+      case 'start-quiz': startQuiz(); break;
+      case 'open-guide':
+        renderGuide();
+        show('guide');
+        break;
+      case 'guide-jump': {
+        const el = $('#guide-' + t.dataset.id);
+        if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 70, behavior: 'smooth' });
+        break;
+      }
+      case 'quiz-pick': {
+        const qz = state.quiz;
+        if (qz.picked) return;
+        qz.picked = t.dataset.val;
+        qz.results[qz.idx] = { choice: qz.picked, mark: quizMark(qz.items[qz.idx], qz.picked) };
+        renderQuiz();
+        break;
+      }
+      case 'quiz-next':
+        state.quiz.idx++;
+        state.quiz.picked = null;
+        renderQuiz();
+        window.scrollTo(0, 0);
+        break;
+      case 'sc-filter':
+        state.scFilter = t.dataset.val;
+        renderHome();
+        break;
+      case 'start-scenario': start(t.dataset.id); break;
+      case 'goto-step': goStep(Number(t.dataset.step)); break;
+      case 'prev': goStep(state.step - 1); break;
+      case 'next': {
+        const cur = S()[state.step];
+        if (D.flows && cur.fields.includes(D.typeField)) {
+          const t = state.answers[D.typeField];
+          if (!t) return;
+          if (state.scenario && !state.typeCommitted) state.typeCommitted = t;
+          if (!state.scenario && !D.flows[t]) { alert('このタイプの練習データはまだ準備中です。'); return; }
+        }
+        goStep(state.step + 1);
+        break;
+      }
+      case 'help': openHelp(fid); break;
+      case 'close-modal': closeModal(); break;
+      case 'kw-set':
+        state.answers.keywords[Number(t.dataset.i)] = t.dataset.val;
+        rerenderField('keywords');
+        refreshProgress();
+        break;
+      case 'add-line': {
+        state.answers[fid].push('');
+        rerenderField(fid);
+        const inputs = document.querySelectorAll(`#field-${fid} input[type=text]`);
+        inputs[inputs.length - 1].focus();
+        break;
+      }
+      case 'remove-line':
+        state.answers[fid].splice(Number(t.dataset.i), 1);
+        rerenderField(fid);
+        updatePreview();
+        refreshProgress();
+        break;
+      case 'shuffle-preview':
+        state.previewSeed = Math.floor(Math.random() * 1e9) + 1;
+        updatePreview();
+        break;
+      case 'pv-place':
+        state.previewPlacement = t.dataset.val;
+        document.querySelectorAll('.pv-tab').forEach(b => b.classList.toggle('on', b.dataset.val === state.previewPlacement));
+        updatePreview();
+        break;
+      case 'ckw-add': addCustomKw(); break;
+      case 'ckw-remove':
+        state.customKw.splice(Number(t.dataset.i), 1);
+        rerenderField('keywords');
+        break;
+      case 'grade':
+        renderResult();
+        show('result');
+        break;
+      case 'retry': start(state.scenario.id); break;
+      case 'review': goStep(S().length - 1); break;
+    }
+  });
+
+  document.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset.role === 'prep-check') {
+      try { localStorage.setItem(prepKey(t.dataset.id), t.checked ? '1' : '0'); } catch (e) { /* 保存できなくても表示は続ける */ }
+      $('#prep-count').textContent = `${D.guide.checklist.filter(c => prepChecked(c.id)).length} / ${D.guide.checklist.length} 完了`;
+      return;
+    }
+    if (t.dataset.role === 'hints') {
+      state.showHints = t.checked;
+      renderStep();
+      return;
+    }
+    const fid = t.dataset.field;
+    if (!fid) return;
+    const f = fieldOf(fid);
+    if (f.type === 'single') {
+      state.answers[fid] = t.value;
+    } else if (f.type === 'multi') {
+      const set = new Set(state.answers[fid]);
+      t.checked ? set.add(t.value) : set.delete(t.value);
+      state.answers[fid] = f.options.map(o => o.value).filter(v => set.has(v));
+    } else {
+      return;
+    }
+    // 単位などがこの項目に連動している項目を更新（例：予算の種類 → 予算額）
+    for (const [id, other] of Object.entries(D.fields)) {
+      if (other.unitBy === fid) {
+        const u = $(`#unit-${id}`), h = $(`#num-help-${id}`);
+        if (u) u.textContent = unitOf(id);
+        if (h) h.innerHTML = budgetHelp(id, state.answers[id]);
+      }
+    }
+    updatePreview();
+    refreshProgress();
+    if (D.typeField === fid) { renderNav(); $('#step-count').innerHTML = stepCountText(); }
+    // この項目の値で表示が変わる項目（showIf）が同じステップにあれば描き直す
+    if (S()[state.step].fields.some(id => (fieldOf(id).showIf || {}).field === fid)) {
+      const y = window.scrollY;
+      renderStep();
+      window.scrollTo(0, y);
+    }
+  });
+
+  document.addEventListener('input', e => {
+    const t = e.target, fid = t.dataset.field;
+    if (!fid) return;
+    const f = fieldOf(fid);
+    if (f.type === 'textlist') {
+      const i = Number(t.dataset.i);
+      state.answers[fid][i] = t.value;
+      const w = textWidth(f, t.value);
+      const cc = $(`#cc-${fid}-${i}`);
+      cc.textContent = `${w}/${f.limit}`;
+      cc.className = `cc ${ccClass(f, w)}`;
+      $(`#count-${fid}`).innerHTML = countInfo(fid);
+      updatePreview();
+      refreshProgress();
+    } else if (f.type === 'number') {
+      state.answers[fid] = t.value === '' ? null : Number(t.value);
+      $(`#num-help-${fid}`).innerHTML = budgetHelp(fid, state.answers[fid]);
+      refreshProgress();
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
+    if (e.key === 'Enter' && e.target.id === 'ckw-text' && !e.isComposing) {
+      e.preventDefault();
+      addCustomKw();
+    }
+  });
+
+  let saved = null;
+  try { saved = localStorage.getItem(LS_KEY); } catch (e) { /* 読めなければ既定の媒体 */ }
+  setPlatform(saved);
+  renderHome();
+  show('home');
+})();
+</script>
+</body>
+</html>
