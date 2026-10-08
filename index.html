@@ -476,15 +476,33 @@
   /* password gate */
   body.locked > *:not(#gate) { display: none !important; }
   body.locked { padding-bottom: 0; }
-  #gate { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: #f1f3f4; }
-  .gate-box { width: min(360px, 100%); background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 32px 24px 20px; text-align: center; color: #202124; }
-  .gate-mark { width: 44px; height: 44px; font-size: 15px; margin: 0 auto 12px; background: #1a73e8; color: #fff; }
-  .gate-box h1 { font-size: 18px; font-weight: 500; margin: 0 0 4px; }
+  #gate { position: fixed; inset: 0; z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 24px 16px 40px; background: #f1f3f4; color: #202124; }
+  .gate-inner { width: min(560px, 100%); margin: 0 auto; }
+  .gate-head { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; }
+  .gate-mark { width: 44px; height: 44px; flex: none; font-size: 15px; margin: 0; background: #1a73e8; color: #fff; }
+  .gate-head h1 { font-size: 20px; font-weight: 500; margin: 0; line-height: 1.4; }
+  .gate-about { background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 4px 22px; margin: 0 0 16px; font-size: 16px; line-height: 1.8; }
+  .gate-about section { padding: 18px 0; }
+  .gate-about section + section { border-top: 1px solid #e8eaed; }
+  .gate-about h2 { font-size: 17px; font-weight: 700; margin: 0 0 8px; color: #1a73e8; }
+  .gate-about p { margin: 0; }
+  .gate-about ul { margin: 0; padding: 0; list-style: none; }
+  .gate-about li { position: relative; padding-left: 1.1em; }
+  .gate-about li + li { margin-top: 8px; }
+  .gate-about li::before { content: "・"; position: absolute; left: 0; }
+  .gate-about li b { font-weight: 700; }
+  .gate-note { margin: 0 0 18px; padding: 12px 14px; border-radius: 8px; background: #fef7e0; color: #5f4b00; font-size: 14px; line-height: 1.7; }
+  .gate-box { background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 24px 22px 20px; text-align: center; }
+  .gate-box label { display: block; margin: 0 0 12px; font-size: 16px; font-weight: 500; }
   .gate-box p { margin: 0 0 16px; font-size: 14px; color: #5f6368; }
-  .gate-box input { width: 100%; font-size: 20px; text-align: center; letter-spacing: .3em; padding: 10px; border: 1px solid #dadce0; border-radius: 6px; }
-  .gate-box .block { margin: 14px 0 10px; background: #1a73e8; color: #fff; }
+  .gate-box input { width: 100%; max-width: 320px; font-size: 20px; text-align: center; letter-spacing: .3em; padding: 10px; border: 1px solid #dadce0; border-radius: 6px; }
+  .gate-box .block { width: 100%; max-width: 320px; margin: 14px auto 0; background: #1a73e8; color: #fff; }
   .gate-error { color: #d93025 !important; margin: 8px 0 0 !important; }
-  .gate-box small { color: #5f6368; font-size: 11px; }
+  @media (max-width: 480px) {
+    #gate { padding: 16px 16px 32px; }
+    .gate-head h1 { font-size: 18px; }
+    .gate-about { padding: 2px 16px; }
+  }
 
   /* =========================================================
      Meta広告マネージャ風テーマ
@@ -670,15 +688,44 @@
 
 <!-- 簡易パスワード画面（パスワードは config.js で変更できます） -->
 <div id="gate" hidden>
-  <form class="gate-box" id="gate-form" autocomplete="off">
-    <span class="brand-mark gate-mark" aria-hidden="true">Ad</span>
-    <h1>広告キャンペーン作成トレーナー</h1>
-    <p>パスワードを入力してください</p>
-    <input type="password" id="gate-input" inputmode="numeric" aria-label="パスワード" autofocus>
-    <p class="gate-error" id="gate-error" role="alert" hidden>パスワードが違います</p>
-    <button type="submit" class="btn-primary block">入る</button>
-    <small>練習用ツール</small>
-  </form>
+  <div class="gate-inner">
+    <div class="gate-head">
+      <span class="brand-mark gate-mark" aria-hidden="true">Ad</span>
+      <h1>広告キャンペーン作成トレーナー</h1>
+    </div>
+
+    <div class="gate-about">
+      <section>
+        <h2>■ このツールについて</h2>
+        <p>ネット広告（Google広告・Meta広告）の設定を、本物に近い画面で練習できるツールです。実際にお金を使わずに、何度でも試せます。</p>
+      </section>
+      <section>
+        <h2>■ できること</h2>
+        <ul>
+          <li><b>練習モード：</b>広告を作る流れを、1ステップずつ体験できます</li>
+          <li><b>ⓘボタン：</b>わからない項目は、押すと意味や選び方が出てきます</li>
+          <li><b>シナリオモード：</b>「飲食店のお客さんを増やしたい」などのお題に合わせて設定し、あとで点数と解説が出ます</li>
+          <li><b>クイズモード：</b>お題に合う広告の種類を当てる練習ができます</li>
+        </ul>
+      </section>
+      <section>
+        <h2>■ こんな人におすすめ</h2>
+        <ul>
+          <li>ネット広告をこれから勉強したい人</li>
+          <li>本番の前に、設定の流れを覚えておきたい人</li>
+        </ul>
+      </section>
+    </div>
+
+    <p class="gate-note">※ これは練習用ツールです。Google・Metaの公式ツールではありません。</p>
+
+    <form class="gate-box" id="gate-form" autocomplete="off">
+      <label for="gate-input">パスワードを入力してください</label>
+      <input type="password" id="gate-input" inputmode="numeric">
+      <p class="gate-error" id="gate-error" role="alert" hidden>パスワードが違います</p>
+      <button type="submit" class="btn-primary block">入る</button>
+    </form>
+  </div>
 </div>
 
 <header class="app-header">
@@ -754,7 +801,8 @@
   document.body.classList.add('locked');
   gate.hidden = false;
   const input = document.getElementById('gate-input');
-  input.focus();
+  // スマホでは説明を先に読めるよう、自動でキーボードを出さない
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) input.focus({ preventScroll: true });
   document.getElementById('gate-form').addEventListener('submit', e => {
     e.preventDefault();
     if (input.value === pw) {
