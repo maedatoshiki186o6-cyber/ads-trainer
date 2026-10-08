@@ -48,6 +48,8 @@
   .brand-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .brand-mark { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: grid; place-items: center; font-size: 12px; font-weight: 500; flex: none; }
   .header-right { display: flex; align-items: center; gap: 6px; flex: none; }
+  .about-btn { font-size: 12px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--line, #dadce0); background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+  .about-btn .sm { display: none; }
   .practice-chip { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px dashed var(--muted); color: var(--muted); white-space: nowrap; }
   .mode-badge { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: var(--surface-2); color: var(--muted); font-weight: 500; white-space: nowrap; }
 
@@ -473,35 +475,31 @@
   .tip { margin-top: 20px; background: var(--accent-soft); border-radius: var(--radius); padding: 12px 14px; font-size: 14px; }
   .tip strong { display: block; margin-bottom: 2px; font-weight: 500; }
 
-  /* password gate */
-  body.locked > *:not(#gate) { display: none !important; }
-  body.locked { padding-bottom: 0; }
-  #gate { position: fixed; inset: 0; z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 24px 16px 40px; background: #f1f3f4; color: #202124; }
-  .gate-inner { width: min(560px, 100%); margin: 0 auto; }
-  .gate-head { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; }
-  .gate-mark { width: 44px; height: 44px; flex: none; font-size: 15px; margin: 0; background: #1a73e8; color: #fff; }
-  .gate-head h1 { font-size: 20px; font-weight: 500; margin: 0; line-height: 1.4; }
-  .gate-about { background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 4px 22px; margin: 0 0 16px; font-size: 16px; line-height: 1.8; }
-  .gate-about section { padding: 18px 0; }
-  .gate-about section + section { border-top: 1px solid #e8eaed; }
-  .gate-about h2 { font-size: 17px; font-weight: 700; margin: 0 0 8px; color: #1a73e8; }
-  .gate-about p { margin: 0; }
-  .gate-about ul { margin: 0; padding: 0; list-style: none; }
-  .gate-about li { position: relative; padding-left: 1.1em; }
-  .gate-about li + li { margin-top: 8px; }
-  .gate-about li::before { content: "・"; position: absolute; left: 0; }
-  .gate-about li b { font-weight: 700; }
-  .gate-note { margin: 0 0 18px; padding: 12px 14px; border-radius: 8px; background: #fef7e0; color: #5f4b00; font-size: 14px; line-height: 1.7; }
-  .gate-box { background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 24px 22px 20px; text-align: center; }
-  .gate-box label { display: block; margin: 0 0 12px; font-size: 16px; font-weight: 500; }
-  .gate-box p { margin: 0 0 16px; font-size: 14px; color: #5f6368; }
-  .gate-box input { width: 100%; max-width: 320px; font-size: 20px; text-align: center; letter-spacing: .3em; padding: 10px; border: 1px solid #dadce0; border-radius: 6px; }
-  .gate-box .block { width: 100%; max-width: 320px; margin: 14px auto 0; background: #1a73e8; color: #fff; }
-  .gate-error { color: #d93025 !important; margin: 8px 0 0 !important; }
+  /* 説明画面（開くたびに表示。ヘッダーの「このツールについて」からも開ける） */
+  body.intro-open > *:not(#intro) { display: none !important; }
+  body.intro-open { padding-bottom: 0; }
+  #intro { position: fixed; inset: 0; z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 24px 16px 40px; background: #f1f3f4; color: #202124; }
+  .intro-inner { width: min(560px, 100%); margin: 0 auto; }
+  .intro-head { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; }
+  .intro-mark { width: 44px; height: 44px; flex: none; font-size: 15px; margin: 0; background: #1a73e8; color: #fff; }
+  .intro-head h1 { font-size: 20px; font-weight: 500; margin: 0; line-height: 1.4; }
+  .intro-about { background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 4px 22px; margin: 0 0 16px; font-size: 16px; line-height: 1.8; }
+  .intro-about section { padding: 18px 0; }
+  .intro-about section + section { border-top: 1px solid #e8eaed; }
+  .intro-about h2 { font-size: 17px; font-weight: 700; margin: 0 0 8px; color: #1a73e8; }
+  .intro-about p { margin: 0; }
+  .intro-about ul { margin: 0; padding: 0; list-style: none; }
+  .intro-about li { position: relative; padding-left: 1.1em; }
+  .intro-about li + li { margin-top: 8px; }
+  .intro-about li::before { content: "・"; position: absolute; left: 0; }
+  .intro-about li b { font-weight: 700; }
+  .intro-note { margin: 0 0 18px; padding: 12px 14px; border-radius: 8px; background: #fef7e0; color: #5f4b00; font-size: 14px; line-height: 1.7; }
+  .intro-start { text-align: center; }
+  .intro-start .btn-primary { width: 100%; max-width: 320px; padding: 14px; font-size: 17px; background: #1a73e8; color: #fff; }
   @media (max-width: 480px) {
-    #gate { padding: 16px 16px 32px; }
-    .gate-head h1 { font-size: 18px; }
-    .gate-about { padding: 2px 16px; }
+    #intro { padding: 16px 16px 32px; }
+    .intro-head h1 { font-size: 18px; }
+    .intro-about { padding: 2px 16px; }
   }
 
   /* =========================================================
@@ -662,6 +660,9 @@
   @media (max-width: 560px) {
     .brand { font-size: 15px; gap: 8px; }
     .practice-chip { font-size: 10px; padding: 1px 6px; }
+    .about-btn { padding: 3px 8px; }
+    .about-btn .lg { display: none; }
+    .about-btn .sm { display: inline; }
     .hero h1 { font-size: 21px; }
     #stepper { justify-content: flex-start; }
     .step-chip { width: 76px; font-size: 11px; }
@@ -686,15 +687,15 @@
 </head>
 <body>
 
-<!-- 簡易パスワード画面（パスワードは config.js で変更できます） -->
-<div id="gate" hidden>
-  <div class="gate-inner">
-    <div class="gate-head">
-      <span class="brand-mark gate-mark" aria-hidden="true">Ad</span>
+<!-- 説明画面（ツールを開くたびに表示） -->
+<div id="intro" hidden>
+  <div class="intro-inner">
+    <div class="intro-head">
+      <span class="brand-mark intro-mark" aria-hidden="true">Ad</span>
       <h1>広告キャンペーン作成トレーナー</h1>
     </div>
 
-    <div class="gate-about">
+    <div class="intro-about">
       <section>
         <h2>■ このツールについて</h2>
         <p>ネット広告（Google広告・Meta広告）の設定を、本物に近い画面で練習できるツールです。実際にお金を使わずに、何度でも試せます。</p>
@@ -717,14 +718,11 @@
       </section>
     </div>
 
-    <p class="gate-note">※ これは練習用ツールです。Google・Metaの公式ツールではありません。</p>
+    <p class="intro-note">※ これは練習用ツールです。Google・Metaの公式ツールではありません。</p>
 
-    <form class="gate-box" id="gate-form" autocomplete="off">
-      <label for="gate-input">パスワードを入力してください</label>
-      <input type="password" id="gate-input" inputmode="numeric">
-      <p class="gate-error" id="gate-error" role="alert" hidden>パスワードが違います</p>
-      <button type="submit" class="btn-primary block">入る</button>
-    </form>
+    <div class="intro-start">
+      <button type="button" class="btn-primary" id="intro-start">はじめる</button>
+    </div>
   </div>
 </div>
 
@@ -735,6 +733,7 @@
       <span class="brand-text">広告キャンペーン作成トレーナー</span>
     </button>
     <span class="header-right">
+      <button type="button" class="about-btn" id="open-intro"><span class="lg">このツールについて</span><span class="sm" aria-hidden="true">説明</span></button>
       <span class="practice-chip" title="実際の広告管理画面ではありません">練習用ツール</span>
       <span class="mode-badge" id="mode-badge" hidden></span>
     </span>
@@ -784,36 +783,28 @@
   </div>
 </div>
 
-<!-- 設定（パスワードなど） -->
-<script src="config.js"></script>
 <script>
 (function () {
-  // 簡易パスワード画面：一度正しく入力したブラウザでは、次回から表示しない
-  const pw = String((window.TRAINER_CONFIG || {}).password || '');
-  if (!pw) return;
-  const KEY = 'adsTrainer.unlocked';
-  // パスワードそのものではなく簡易的なハッシュを保存（パスワードを変えると再入力が必要になる）
-  const hash = t => { let h = 5381; for (const c of t) h = ((h << 5) + h + c.codePointAt(0)) >>> 0; return h.toString(36); };
-  let ok = false;
-  try { ok = localStorage.getItem(KEY) === hash(pw); } catch (e) { /* 保存できない環境では毎回入力 */ }
-  if (ok) return;
-  const gate = document.getElementById('gate');
-  document.body.classList.add('locked');
-  gate.hidden = false;
-  const input = document.getElementById('gate-input');
-  // スマホでは説明を先に読めるよう、自動でキーボードを出さない
-  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) input.focus({ preventScroll: true });
-  document.getElementById('gate-form').addEventListener('submit', e => {
-    e.preventDefault();
-    if (input.value === pw) {
-      try { localStorage.setItem(KEY, hash(pw)); } catch (err) { /* 保存できなくても今回は入れる */ }
-      document.body.classList.remove('locked');
-      gate.hidden = true;
-    } else {
-      document.getElementById('gate-error').hidden = false;
-      input.select();
-    }
-  });
+  // 説明画面：開くたびに表示し、「はじめる」でツールに入る。ヘッダーのボタンでいつでも見返せる
+  const intro = document.getElementById('intro');
+  const btn = document.getElementById('intro-start');
+  let backY = 0;
+  const open = first => {
+    backY = window.scrollY;
+    btn.textContent = first ? 'はじめる' : 'ツールに戻る';
+    document.body.classList.add('intro-open');
+    intro.hidden = false;
+    intro.scrollTop = 0;
+  };
+  const close = () => {
+    document.body.classList.remove('intro-open');
+    intro.hidden = true;
+    window.scrollTo(0, backY);
+  };
+  btn.addEventListener('click', close);
+  document.getElementById('open-intro').addEventListener('click', () => open(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !intro.hidden) close(); });
+  open(true);
 })();
 </script>
 
