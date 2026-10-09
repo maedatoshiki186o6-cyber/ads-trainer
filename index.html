@@ -683,6 +683,50 @@
     .theme-meta .tree-node strong { font-size: 12px; }
     .level-banner .lv-ico { display: none; }
   }
+  /* =========================================================
+     実践シミュレーション（sim.js）
+     ========================================================= */
+  .sim-hero { padding-bottom: 12px; }
+  .sim-steps { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .sim-steps li { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 99px; padding: 3px 12px 3px 4px; }
+  .sim-steps .num { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; border: 1px solid var(--muted); flex: none; }
+  .sim-steps small { font-size: 11px; margin-left: 4px; }
+  .sim-steps li.active { color: var(--text); font-weight: 500; border-color: var(--accent); background: var(--accent-soft); }
+  .sim-steps li.active .num, .sim-steps li.done .num { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sim-disclaimer { margin: 12px 0; padding: 10px 14px; border-radius: var(--radius); background: var(--ok-soft); color: var(--ok); font-size: 13px; }
+  .sim-disclaimer-foot { margin: 28px 0 40px; }
+  .sc-card.sim-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+  .sim-group { padding-top: 18px; padding-bottom: 8px; }
+  .sim-item { border: 0; border-top: 1px solid var(--border); margin: 12px 0 0; padding: 12px 0 8px; min-width: 0; }
+  .sim-group .field-head + .sim-item { border-top: 0; margin-top: 4px; }
+  .sim-label { display: block; font-size: 14px; font-weight: 500; padding: 0; margin: 0 0 8px; }
+  .sim-req { font-size: 11px; font-weight: 500; color: var(--bad); background: var(--bad-soft); border-radius: 99px; padding: 1px 8px; margin-left: 6px; }
+  .sim-hint { margin: -4px 0 8px; font-size: 12px; color: var(--muted); }
+  .sim-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sim-chip { position: relative; display: inline-flex; }
+  .sim-chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .sim-chip span { border: 1px solid var(--border); border-radius: 99px; padding: 6px 14px; font-size: 13px; background: var(--surface); line-height: 1.4; transition: border-color .15s, background .15s; }
+  .sim-chip:hover span { border-color: var(--accent); }
+  .sim-chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sim-chip input:checked + span { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 500; box-shadow: inset 0 0 0 1px var(--accent); }
+  .sim-text { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font: inherit; font-size: 14px; background: var(--surface); color: var(--text); resize: vertical; }
+  .sim-submit { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; background: var(--surface); border-top: 1px solid var(--border); margin: 20px -16px 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .sim-rest { margin: 0; font-size: 13px; color: var(--muted); }
+  .sim-rest b { color: var(--bad); }
+  .sim-karte { margin: 12px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  .sim-karte dt { color: var(--muted); font-size: 13px; }
+  .sim-karte dd { margin: 0; }
+  .sim-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
+  .sim-kpis div { background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; }
+  .sim-kpis small { display: block; font-size: 12px; color: var(--muted); }
+  .sim-kpis b { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .sim-counts { margin: 24px 0 4px; }
+  .res-item.sim-info { border-left-color: var(--accent); }
+  @media (max-width: 560px) {
+    .sim-karte { grid-template-columns: 1fr; gap: 0; }
+    .sim-karte dd { margin-bottom: 8px; }
+    .sim-submit .btn-primary { flex: 1; }
+  }
 </style>
 </head>
 <body>
@@ -707,6 +751,7 @@
           <li><b>ⓘボタン：</b>わからない項目は、押すと意味や選び方が出てきます</li>
           <li><b>シナリオモード：</b>「飲食店のお客さんを増やしたい」などのお題に合わせて設定し、あとで点数と解説が出ます</li>
           <li><b>クイズモード：</b>お題に合う広告の種類を当てる練習ができます</li>
+          <li><b>実践シミュレーション：</b>案件情報を入力して、広告の設定から3ヶ月分の運用改善までを体験できます</li>
         </ul>
       </section>
       <section>
@@ -766,6 +811,8 @@
   <section id="view-quiz" class="wrap" hidden></section>
 
   <section id="view-guide" class="wrap" hidden></section>
+
+  <section id="view-sim" class="wrap" hidden></section>
 </main>
 
 <nav id="bottom-nav" hidden>
@@ -819,6 +866,10 @@
 <script src="data-google-quiz.js"></script>
 <script src="data-meta.js"></script>
 <script src="data-meta-prep.js"></script>
+<!-- 実践シミュレーション（目安の数値 → 案件データ → 画面と計算） -->
+<script src="sim-benchmarks.js"></script>
+<script src="sim-cases.js"></script>
+<script src="sim.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1011,7 +1062,7 @@
 
   /* ---------- views ---------- */
   function show(view) {
-    for (const v of ['home', 'wizard', 'result', 'quiz', 'guide']) $('#view-' + v).hidden = v !== view;
+    for (const v of ['home', 'wizard', 'result', 'quiz', 'guide', 'sim']) $('#view-' + v).hidden = v !== view;
     $('#bottom-nav').hidden = view !== 'wizard';
     document.body.classList.toggle('has-nav', view === 'wizard');
     const badge = $('#mode-badge');
@@ -1063,6 +1114,11 @@
         <span class="mode-icon" aria-hidden="true">❓</span>
         <span><strong>どのキャンペーンタイプを選ぶ？</strong><small>お題を読んで最適なキャンペーンタイプを当てるクイズです（全${Math.min(QUIZ_LEN, D.quiz.length)}問）。</small></span>
       </button>` : ''}
+      <h2 class="sec-title">実践シミュレーション<small>案件の情報から、設定・成果・3ヶ月の運用改善まで</small></h2>
+      <button class="mode-card" data-action="start-sim">
+        <span class="mode-icon" aria-hidden="true">📈</span>
+        <span><strong>案件カルテから運用を体験する</strong><small>サンプル案件か自分の案件を入力して、広告の設定と成果の変化を試せます。数値は学習用の目安です。</small></span>
+      </button>
       <h2 class="sec-title">シナリオモード<small>お題に合う設定を選び、最後に採点します</small></h2>
       ${D.flows ? `<div class="filter-chips" role="tablist" aria-label="キャンペーンタイプで絞り込む">
         ${['all', ...Object.keys(D.flows)].map(t => {
