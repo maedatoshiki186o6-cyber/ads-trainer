@@ -25,7 +25,7 @@
     { id: 'result', title: '成果シミュレーション' },
     { id: 'improve', title: '運用改善（3ヶ月）' }
   ];
-  const READY = ['karte', 'setup']; // 実装済みの段階
+  const READY = ['karte', 'setup', 'result']; // 実装済みの段階
 
   /* ---------- カルテの項目 ---------- */
   const fieldOf = id => C.karteFields[id];
@@ -78,6 +78,7 @@
     karte: blankKarte(),
     sampleId: null,
     setup: null,
+    seed: 0,          // 成果シミュレーションのランダムなブレの元（「もう一度」で変わる）
     karteOpen: false, // 画面右下の「カルテ」パネルを開いているか
     dirty: false
   };
@@ -278,7 +279,8 @@
     karte:       { title: () => '案件カルテを作ろう', body: () => renderKarte() },
     diagnosis:   { title: () => '案件カルテの診断', body: () => renderDiagnosis() },
     setup:       { title: () => st.karte.media === 'meta' ? 'オーディエンスを設定しよう' : 'キーワードを選ぼう', body: () => st.karte.media === 'meta' ? renderSetupMeta() : renderSetupGoogle() },
-    setupResult: { title: () => st.karte.media === 'meta' ? 'オーディエンス設定の採点' : 'キーワード選びの採点', body: () => renderSetupResult() }
+    setupResult: { title: () => st.karte.media === 'meta' ? 'オーディエンス設定の採点' : 'キーワード選びの採点', body: () => renderSetupResult() },
+    result:      { title: () => '1ヶ月目の成果シミュレーション', body: () => renderResult() }
   };
 
   function render() {
@@ -961,7 +963,7 @@
       ${items.map(itemHtml).join('')}
       <div class="end-actions">
         <button type="button" class="btn-ghost" data-action="sim-back-setup">← 設定を直す</button>
-        <button type="button" class="btn-primary" disabled title="次の段階で追加予定です">次へ：成果シミュレーション（準備中）</button>
+        <button type="button" class="btn-primary" data-action="sim-to-result">次へ：成果シミュレーション →</button>
       </div>`;
   }
 
@@ -977,6 +979,349 @@
     if (!st.setup.customNeg.includes(t)) st.setup.customNeg.push(t);
     renderKeep();
     $('#sim-neg-text').focus();
+  }
+
+  /* =========================================================
+     段階3：成果シミュレーション（計算エンジン）
+     数値は sim-benchmarks.js の目安を掛け合わせて求める。月(month)と opts で
+     2・3ヶ月目（段階4）にも使えるようにしている。
+     ========================================================= */
+  // 同じ seed なら同じ結果になる乱数（画面を描き直しても数値が変わらないように）
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const jitter = (r, amp) => 1 + (r() * 2 - 1) * amp;
+  // 期待値 λ のときの件数（少ない件数でも自然にばらつくように）
+  function poisson(r, lambda) {
+    if (lambda <= 0) return 0;
+    if (lambda > 40) return Math.max(0, Math.round(lambda + Math.sqrt(lambda) * (r() + r() + r() - 1.5) * 2));
+    const L = Math.exp(-lambda);
+    let k = 0, p = 1;
+    do { k++; p *= r(); } while (p > L);
+    return k - 1;
+  }
+  const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+  function newSeed() { st.seed = Math.floor(Math.random() * 1e9) + 1; }
+
+  // 地域の設定が成約率に与える倍率（広げて増えた分は成約率が低い）
+  function geoCvrOf(geo) {
+    if (geo.extraCvr == null) return geo.cvr;
+    return geo.cvr / geo.volume + geo.extraCvr * (1 - 1 / geo.volume);
+  }
+  // 計測状況から「管理画面で数えられる成果」を出す
+  function measuredOf(conv) {
+    const m = st.karte.measurement;
+    if (m === 'none') return null;
+    return m === 'partial' ? Math.round(conv * B.partialMeasuredRatio) : conv;
+  }
+
+  /* ---------- Google検索 ---------- */
+  function simGoogle(month = 1, opts = {}) {
+    const k = st.karte, s = st.setup, ind = B.industries[k.industry];
+    const r = rng(st.seed + month * 7919);
+    const scale = B.area[k.area].searchScale;
+    const gk = geoKey(s.area), geo = B.geoFit[gk];
+    const groups = negGroups(), blocked = blockedGroups();
+    const blockedShare = groups.filter(g => blocked.has(g.id)).reduce((a, g) => a + g.share, 0);
+    const conflictHits = new Set(conflictsOf().flatMap(x => x.hits));
+    const blockRules = kwList().filter((c, i) => s.kw[i].act === 'negative' && c.blocks).map(c => c.blocks);
+    const bid = B.bidding[s.bidding], auto = s.bidding !== 'manual';
+    const measured = k.measurement !== 'none';
+    const priorCv = opts.priorCv != null ? opts.priorCv : (numOf('monthlyCv', k.monthlyCv) || 0);
+    const AL = B.autoBidLearning, MS = B.manualShare;
+    const flags = { gk, blockedShare, conflicts: conflictHits.size, budget: k.budget };
+
+    // 入札戦略による倍率
+    let cpcF = bid.cpc, cvrF = bid.cvr || 1, swing = 0;
+    if (bid.needsConversion && !measured) {
+      cpcF *= B.noMeasurement.autoBidCpc;
+      const [lo, hi] = B.noMeasurement.autoBidSwing;
+      cvrF = lo + (hi - lo) * r();
+      flags.noMeasureAuto = true;
+    } else if (bid.needsConversion) {
+      if (priorCv < AL.monthlyConversions) { cpcF *= AL.lowDataCpc; swing = AL.lowDataSwing; flags.lowData = true; }
+      cvrF *= AL.curve[Math.min(month, AL.curve.length) - 1] * (opts.reset ? AL.resetFactor : 1);
+    }
+    let shareF = 1;
+    if (s.bidding === 'targetCpa' && k.targetCpa < benchOf(k).cpa * B.strictTargetCpa.ratio) { shareF = B.strictTargetCpa.shareFactor; flags.strictCpa = true; }
+
+    const lp = B.lp[k.lp].cvr, cons = B.consideration[k.consideration].cvr, geoCvr = geoCvrOf(geo);
+    const n = { imp: jitter(r, B.noise.impressions), ctr: jitter(r, B.noise.ctr), cpc: jitter(r, B.noise.cpc), cvr: jitter(r, B.noise.cvr) * (swing ? jitter(r, swing) : 1) };
+
+    let rows = addedIdx().map(i => {
+      const c = kwList()[i], sel = s.kw[i], m = B.match[sel.match];
+      const term = isTermKw(c);
+      const intent = term ? 'low' : c.intent, it = B.intent[intent];
+      const qk = kwQuality(c), q = B.quality[qk];
+      let searches = (term ? B.termKeyword.volume : c.volume) * scale * geo.volume;
+      if (conflictHits.has(fill(c.kw))) searches = 0;
+      for (const b of blockRules) if (b.themes.includes(c.theme)) searches *= 1 - b.ratio;
+      const matched = searches * m.reach;
+      const relQ = term ? 0 : matched * (1 - m.irrelevant);
+      const irrQ = term ? matched : matched * m.irrelevant * (1 - blockedShare);
+      const listCpc = (term ? B.termKeyword.cpc : c.cpc) * m.cpc * q.cpc * geo.cpc * cpcF;
+      const share = auto ? bid.baseShare * shareF : clamp(MS.base * Math.pow(s.bid / listCpc, MS.power), MS.min, MS.max);
+      const cpc = (auto ? listCpc : Math.min(s.bid, listCpc)) * n.cpc;
+      const ctr = ind.search.ctr * it.ctr * m.ctr * q.ctr * n.ctr;
+      const impRel = relQ * share * n.imp, impIrr = irrQ * share * n.imp;
+      const clkRel = impRel * ctr, clkIrr = impIrr * ctr * B.irrelevantClick.ctr;
+      const cvr = ind.search.cvr * it.cvr * lp * cons * geoCvr * cvrF * n.cvr;
+      return {
+        i, c, text: fill(c.kw), match: sel.match, quality: qk, share, cpc,
+        imp: impRel + impIrr, clicks: clkRel + clkIrr, irrClicks: clkIrr,
+        expConv: clkRel * cvr + clkIrr * cvr * B.irrelevantClick.cvr
+      };
+    });
+
+    // 予算を超える分は表示できない（全体を予算に合わせて縮める）
+    const rawCost = rows.reduce((a, x) => a + x.clicks * x.cpc, 0);
+    const f = rawCost > k.budget ? k.budget / rawCost : 1;
+    flags.limited = f < 0.98;
+    flags.budgetRatio = f;
+    rows = rows.map(x => {
+      const clicks = Math.round(x.clicks * f), irr = Math.min(clicks, Math.round(x.irrClicks * f));
+      const conv = poisson(r, x.expConv * f);
+      return Object.assign(x, { imp: Math.round(x.imp * f), clicks, irrClicks: irr, cost: clicks * x.cpc, irrCost: irr * x.cpc, conv: Math.min(conv, clicks) });
+    });
+
+    const t = rows.reduce((a, x) => ({ imp: a.imp + x.imp, clicks: a.clicks + x.clicks, cost: a.cost + x.cost, conv: a.conv + x.conv, irrClicks: a.irrClicks + x.irrClicks, irrCost: a.irrCost + x.irrCost }),
+      { imp: 0, clicks: 0, cost: 0, conv: 0, irrClicks: 0, irrCost: 0 });
+    t.ctr = t.imp ? t.clicks / t.imp : 0;
+    t.cpc = t.clicks ? t.cost / t.clicks : 0;
+    t.measured = measuredOf(t.conv);
+    t.cpa = t.conv ? t.cost / t.conv : null;
+    t.measuredCpa = t.measured ? t.cost / t.measured : null;
+    flags.dailyClicks = t.clicks / B.budget.daysPerMonth;
+    flags.avgShare = rows.length ? rows.reduce((a, x) => a + x.share, 0) / rows.length : 0;
+
+    // 関係ない検索のクリックを種類ごとに分ける（段階4の検索語句レポートで使う）
+    const open = groups.filter(g => !blocked.has(g.id));
+    const openShare = open.reduce((a, g) => a + g.share, 0) || 1;
+    t.irrByGroup = open.map(g => ({ id: g.id, label: g.label, clicks: Math.round(t.irrClicks * g.share / openShare) }));
+    return { media: 'google', month, rows, totals: t, flags };
+  }
+
+  /* ---------- Meta ---------- */
+  function simMeta(month = 1, opts = {}) {
+    const k = st.karte, m = st.setup.meta, ind = B.industries[k.industry], M = B.meta;
+    const r = rng(st.seed + month * 7919);
+    const size = audienceOf(m);
+    const sets = Number(m.adsets || 1);
+    const measured = k.measurement !== 'none';
+    const flags = { size, sets };
+    // CPM
+    let cpm = ind.meta.cpm * M.placementCpm[m.placement] * (1 + M.adsetOverlapCpm * (sets - 1));
+    if (size < M.smallAudience.under) { cpm *= M.smallAudience.cpm; flags.smallAudience = true; }
+    if (special()) cpm *= M.specialCategoryCpm;
+    cpm *= jitter(r, B.noise.impressions);
+    const imp = Math.round(k.budget / cpm * 1000);
+    const reach = Math.round(Math.min(size, size * (1 - Math.exp(-imp / size))));
+    const freq = reach ? imp / reach : 0;
+    // 広告疲れ
+    const fatigue = freq > M.fatigue.from ? Math.max(0.5, 1 - M.fatigue.ctrDropPerFreq * (freq - M.fatigue.from)) : 1;
+    flags.fatigue = fatigue < 1;
+    // パフォーマンスの目標（計測なしで「コンバージョン」を選ぶと、クリック目的と同じ扱い）
+    const optKey = !measured && (m.optimization === 'conversions' || m.optimization === 'lpviews') ? 'clicks' : m.optimization;
+    flags.optFallback = optKey !== m.optimization;
+    const opt = M.optimization[optKey];
+    const ctr = ind.meta.ctr * B.creative[k.creative].ctr * opt.ctr * fatigue * jitter(r, B.noise.ctr);
+    const clicks = Math.round(imp * ctr);
+    // 成約率
+    const area = !m.metaArea || (m.metaArea === 'narrower' && special()) ? 'match' : m.metaArea;
+    let cvr = ind.meta.cvr * B.lp[k.lp].cvr * B.consideration[k.consideration].cvr * opt.cvr * geoCvrOf(B.geoFit[area]);
+    if (!measured) cvr *= B.noMeasurement.metaCvr;
+    // 学習期間：週のコンバージョンが足りないと完了しない（小規模の予算ではよくある）
+    const weekly = clicks * cvr / (B.budget.daysPerMonth / 7) / sets;
+    flags.weeklyPerSet = weekly;
+    let swing = 0;
+    if (weekly < M.learning.weeklyConversions) { cvr /= M.learning.notCompleteCpa; swing = M.learning.notCompleteSwing; flags.learningIncomplete = true; }
+    if (month === 1 || opts.reset) { cvr *= 0.25 / M.learning.firstWeekCpa + 0.75; flags.firstWeek = true; }
+    cvr *= jitter(r, B.noise.cvr) * (swing ? jitter(r, swing) : 1);
+    const conv = Math.min(clicks, poisson(r, clicks * cvr));
+    const t = { imp, reach, freq, cpm: k.budget / imp * 1000, clicks, ctr: imp ? clicks / imp : 0, cost: k.budget, cpc: clicks ? k.budget / clicks : 0, conv };
+    t.measured = measuredOf(conv);
+    t.cpa = conv ? t.cost / conv : null;
+    t.measuredCpa = t.measured ? t.cost / t.measured : null;
+    return { media: 'meta', month, totals: t, flags };
+  }
+
+  const simulate = (month, opts) => st.karte.media === 'meta' ? simMeta(month, opts) : simGoogle(month, opts);
+
+  /* ---------- 結果の解説（なぜこの数値になったか） ---------- */
+  function explainGoogle(res) {
+    const k = st.karte, t = res.totals, f = res.flags, out = [];
+    const add = (level, title, text) => out.push({ level, title, text });
+    if (f.limited) {
+      const okCpa = t.cpa && t.cpa <= k.targetCpa;
+      add(okCpa ? 'ok' : 'bad', okCpa ? '予算で表示が制限されています（伸ばせる余地あり）' : '予算で表示が制限されています',
+        `設定したキーワードと入札なら月${yen(k.budget / f.budgetRatio)}分の表示ができますが、予算が${yen(k.budget)}なので、表示できたのは約${Math.round(f.budgetRatio * 100)}%です。${okCpa ? 'CPAは目標以内なので、予算を増やせば成果を伸ばせる可能性があります。' : 'キーワードを本命に絞るか、予算を増やすと改善します。'}`);
+    }
+    else if (t.cost < k.budget * 0.6) add('ok', '予算を使い切れていません', `使った費用は${yen(t.cost)}で、予算の${Math.round(t.cost / k.budget * 100)}%です。キーワードが少ない・入札が低いなどで、表示の機会が足りていません。`);
+    else add('good', '予算をほぼ使い切れています', `使った費用は${yen(t.cost)}（予算の${Math.round(t.cost / k.budget * 100)}%）です。`);
+    if (f.dailyClicks < B.budget.minDailyClicks) add('bad', '1日のクリックが少なすぎます', `1日あたり約${f.dailyClicks.toFixed(1)}クリックです。データがたまるのに時間がかかり、良し悪しの判断もしにくくなります。`);
+
+    const irrRate = t.clicks ? t.irrClicks / t.clicks : 0;
+    const broad = res.rows.filter(x => x.match === 'broad').length;
+    const irrText = `クリックの約${Math.round(irrRate * 100)}%（${fmt(t.irrClicks)}回・約${yen(t.irrCost)}）が関係ない検索からでした。${broad ? `部分一致のキーワードが${broad}個あるため、関係ない検索に出やすくなっています。` : ''}除外キーワードで防げたのは、関係ない検索の約${Math.round(f.blockedShare * 100)}%です。`;
+    add(irrRate > 0.15 ? 'bad' : irrRate > 0.05 ? 'ok' : 'good', irrRate > 0.15 ? '関係ない検索に広告費を使っています' : irrRate > 0.05 ? '関係ない検索が少し混ざっています' : '関係ない検索をよく防げています', irrText);
+    if (f.conflicts) add('bad', '除外キーワードが、使うキーワードを打ち消しています', '一部のキーワードに広告がまったく出ていません。除外キーワードを見直しましょう。');
+    if (kwList().some((c, i) => st.setup.kw[i].act === 'negative' && c.blocks)) add('bad', '除外キーワードで、良い検索まで減っています', '自分の商品と矛盾する除外キーワード（例：無料体験なのに「無料」を除外）があり、本命の検索の一部に広告が出ていません。');
+
+    const qs = res.rows.map(x => x.quality);
+    const low = qs.filter(q => q === 'low').length, high = qs.filter(q => q === 'high').length;
+    if (low) add('bad', '品質の低いキーワードがあります', `${low}個のキーワードで、広告見出しとの関連性が低くなっています。クリック率×${B.quality.low.ctr}・クリック単価×${B.quality.low.cpc}で計算しています。`);
+    else if (high === qs.length && qs.length) add('good', 'すべてのキーワードで品質が高いです', `見出しとキーワードがよく合っているので、クリック率が上がり（×${B.quality.high.ctr}）、クリック単価が下がっています（×${B.quality.high.cpc}）。`);
+    else add('ok', '品質が「ふつう」のキーワードがあります', 'キーワードのテーマに合う見出しを追加すると、クリック単価が下がります。');
+
+    const g = B.geoFit[f.gk];
+    if (f.gk === 'nationalForLocal') add('bad', '全国に配信しています', `表示は増えていますが、大半が来られない地域の人です（増えた分の成約率×${g.extraCvr}）。`);
+    else if (f.gk === 'wider') add('ok', '商圏より広く配信しています', `表示は×${g.volume}に増えていますが、増えた分の成約率は×${g.extraCvr}です。`);
+    else if (f.gk === 'narrower') add('ok', '商圏より狭く配信しています', `成約率は上がりますが（×${g.cvr}）、表示が減り（×${g.volume}）、クリック単価が上がっています（×${g.cpc}）。`);
+
+    if (st.setup.bidding === 'manual' && f.avgShare < 0.35) add('bad', '入札額が低く、あまり掲載されていません', `入札額${yen(st.setup.bid)}では、検索されても広告が出たのは平均約${Math.round(f.avgShare * 100)}%でした。`);
+    if (f.noMeasureAuto) add('bad', '計測なしで自動入札を使っています', `成果のデータがないため、Googleが何を目指せばいいか分からず、成果が不安定になっています。クリック単価も×${B.noMeasurement.autoBidCpc}で計算しています。`);
+    if (f.lowData) add('ok', '自動入札の学習データが足りません', `月のコンバージョンが${B.autoBidLearning.monthlyConversions}件未満なので、成果のブレを大きく（±${Math.round(B.autoBidLearning.lowDataSwing * 100)}%）、クリック単価を×${B.autoBidLearning.lowDataCpc}で計算しています。`);
+    if (f.strictCpa) add('bad', '目標CPAが厳しく、配信が絞られています', `目標CPA ${yen(k.targetCpa)}は目安よりかなり低いため、Googleが入札を控え、表示が約半分になっています。`);
+    explainCommon(out, add);
+    return out;
+  }
+
+  function explainMeta(res) {
+    const k = st.karte, t = res.totals, f = res.flags, M = B.meta, out = [];
+    const add = (level, title, text) => out.push({ level, title, text });
+    if (f.smallAudience) add('bad', 'オーディエンスが狭すぎます', `推定約${fmt(f.size)}人まで絞り込んでいるため、CPMが×${M.smallAudience.cpm}に上がっています。`);
+    else add('good', 'オーディエンスの広さは十分です', `推定約${fmt(f.size)}人に配信できるので、CPMが上がりにくくなっています。`);
+    if (f.fatigue) add('bad', '同じ人に何度も表示されています（広告疲れ）', `フリークエンシーが月${t.freq.toFixed(1)}回で、${M.fatigue.from}回を超えたぶんクリック率が下がっています。オーディエンスを広げるか、素材を増やしましょう。`);
+    else add('good', 'フリークエンシーは適正です', `1人あたり月${t.freq.toFixed(1)}回の表示で、広告疲れは起きていません。`);
+    if (f.learningIncomplete) add('ok', '学習期間が完了していません', `広告セット1つあたりのコンバージョンが週約${f.weeklyPerSet.toFixed(1)}件で、学習完了の目安（週${M.learning.weeklyConversions}件）に届いていません。CPA×${M.learning.notCompleteCpa}、ブレ±${Math.round(M.learning.notCompleteSwing * 100)}%で計算しています。${M.learning.note}`);
+    if (f.firstWeek) add('ok', '最初の1週間は学習期間です', `配信を始めた直後は、Metaが反応しやすい人を探している途中なので、最初の1週間はCPA×${M.learning.firstWeekCpa}で計算しています。`);
+    if (f.optFallback) add('bad', '計測がないので、成果に向けた配信ができていません', 'ピクセルがないため、選んだパフォーマンスの目標は働かず、「リンクのクリック数」と同じ扱いで計算しています。');
+    else if (st.setup.meta.optimization === 'clicks') add('ok', 'クリック目的で配信しています', `クリックしやすい人に配信されるため、クリック率は上がりますが（×${M.optimization.clicks.ctr}）、成約率は下がります（×${M.optimization.clicks.cvr}）。`);
+    else if (st.setup.meta.optimization === 'reach') add('bad', 'リーチ目的で配信しています', `多くの人に見せる設定なので、クリック率（×${M.optimization.reach.ctr}）も成約率（×${M.optimization.reach.cvr}）も低くなっています。`);
+    if (f.sets > 1) add('ok', `広告セットを${f.sets}つに分けています`, `予算とデータが分散し、同じ人を取り合うためCPMも少し上がっています（1つ増えるごとに+${Math.round(M.adsetOverlapCpm * 100)}%）。`);
+    if (special()) add('ok', '特別な広告カテゴリの制限があります', `ターゲティングが制限されるため、CPMを×${M.specialCategoryCpm}で計算しています。`);
+    if (st.setup.meta.placement !== 'auto') add('ok', '配置を絞っています', `配信先が減るため、CPMを×${M.placementCpm[st.setup.meta.placement]}で計算しています。`);
+    explainCommon(out, add);
+    return out;
+  }
+
+  function explainCommon(out, add) {
+    const k = st.karte;
+    if (k.lp === 'none') add('bad', 'LPがないため、成約率が下がっています', `電話・SNSへの誘導だけなので、成約率を×${B.lp.none.cvr}で計算しています。LPを用意するのが大きな改善になります。`);
+    else if (k.lp === 'homepage') add('ok', 'LPがホームページのトップだけです', `成約率を×${B.lp.homepage.cvr}で計算しています。広告の内容に合ったページを用意すると改善します。`);
+    if (k.measurement === 'none') add('bad', '成果が計測できていません', 'ここに出ている成果の数は「実際にはこのくらい出ているはず」という推定です。管理画面では0件に見えるため、良し悪しを判断できません。');
+    else if (k.measurement === 'partial') add('ok', '成果の一部しか計測できていません', `実際の成果のうち、管理画面で数えられるのは約${Math.round(B.partialMeasuredRatio * 100)}%です。実際より悪く見えてしまいます。`);
+  }
+
+  // 目標との比較
+  function verdictOf(t) {
+    const k = st.karte;
+    const cv = t.measured != null ? t.measured : t.conv;
+    const cpa = t.measured != null ? t.measuredCpa : t.cpa;
+    if (k.upperCpa && cpa && cpa > k.upperCpa) return { level: 'bad', text: '赤字です', sub: `CPA ${yen(cpa)} が上限CPA ${yen(k.upperCpa)} を超えています。` };
+    if (!cv) return { level: 'bad', text: '成果が出ていません', sub: '1件もコンバージョンが出ていません。' };
+    if (cv >= k.targetCount && cpa <= k.targetCpa * 1.05) return { level: 'good', text: '目標達成！', sub: `目標の${fmt(k.targetCount)}件・CPA ${yen(k.targetCpa)} をクリアしました。` };
+    if (cv >= k.targetCount * 0.7) return { level: 'ok', text: 'あと少しで目標です', sub: `目標の${fmt(k.targetCount)}件まであと${fmt(Math.max(0, k.targetCount - cv))}件です。` };
+    return { level: 'bad', text: '目標に届いていません', sub: `目標${fmt(k.targetCount)}件に対して${fmt(cv)}件（${Math.round(cv / k.targetCount * 100)}%）です。` };
+  }
+
+  /* ---------- 結果の画面 ---------- */
+  function renderResult() {
+    const k = st.karte, res = simulate(1), t = res.totals, isMeta = res.media === 'meta';
+    const items = isMeta ? explainMeta(res) : explainGoogle(res);
+    const v = verdictOf(t);
+    const cvLabel = t.measured == null ? `<b>${fmt(t.conv)}件</b><small>推定（管理画面では0件）</small>`
+      : k.measurement === 'partial' ? `<b>${fmt(t.measured)}件</b><small>実際は約${fmt(t.conv)}件</small>` : `<b>${fmt(t.conv)}件</b>`;
+    const cpaVal = t.measured == null ? t.cpa : t.measuredCpa;
+    const cvShown = t.measured != null ? t.measured : t.conv;
+    const pctOf = (a, b) => Math.min(100, Math.round(a / b * 100));
+    const kpi = (label, val, sub = '') => `<div><small>${label}</small><b>${val}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+
+    const metaKpis = isMeta ? [
+      kpi('表示回数', fmt(t.imp) + '回'), kpi('リーチ', fmt(t.reach) + '人'), kpi('フリークエンシー', t.freq.toFixed(1) + '回'),
+      kpi('CPM', yen(t.cpm)), kpi('クリック数', fmt(t.clicks) + '回'), kpi('クリック率', pct(t.ctr, 2)), kpi('クリック単価', yen(t.cpc))
+    ] : [
+      kpi('表示回数', fmt(t.imp) + '回'), kpi('クリック数', fmt(t.clicks) + '回'), kpi('クリック率', pct(t.ctr, 2)), kpi('クリック単価', yen(t.cpc))
+    ];
+
+    return `
+      <p class="lead">${isMeta ? 'オーディエンス設定' : 'キーワード・広告見出し・地域・入札'}とカルテの内容から、1ヶ月配信した場合の成果を計算しました。毎回少しランダムなブレが入ります。</p>
+
+      <section class="field sim-verdict ${v.level}">
+        <p class="sim-verdict-main">${v.level === 'good' ? '🎉' : v.level === 'ok' ? '💪' : '⚠️'} ${esc(v.text)}</p>
+        <p class="sim-hint">${esc(v.sub)}</p>
+        <div class="sim-goal-bars">
+          <div><span>コンバージョン</span><div class="sim-bar"><i style="width:${pctOf(cvShown, k.targetCount)}%"></i></div><b>${fmt(cvShown)} / ${fmt(k.targetCount)}件</b></div>
+          <div><span>CPA</span><div class="sim-bar ${cpaVal && cpaVal > k.targetCpa ? 'over' : ''}"><i style="width:${cpaVal ? pctOf(cpaVal, Math.max(k.targetCpa, k.upperCpa || 0) * 1.2 || 1) : 0}%"></i></div><b>${cpaVal ? yen(cpaVal) : '―'}<small>目標 ${yen(k.targetCpa)}${k.upperCpa ? `・上限 ${yen(k.upperCpa)}` : ''}</small></b></div>
+        </div>
+      </section>
+
+      <section class="field">
+        <div class="field-head"><h3>📈 1ヶ月目の結果</h3></div>
+        <div class="sim-kpis sim-result-kpis">
+          ${metaKpis.join('')}
+          ${kpi('費用', yen(t.cost), `予算 ${manYen(k.budget)}`)}
+          <div class="sim-kpi-cv"><small>コンバージョン</small>${cvLabel}</div>
+          ${kpi('CPA', cpaVal ? yen(cpaVal) : '―', t.measured == null ? '推定' : '')}
+          ${isMeta ? kpi('オーディエンス', '約' + fmt(res.flags.size) + '人', res.flags.learningIncomplete ? '学習は未完了' : '学習完了') : ''}
+        </div>
+      </section>
+
+      <h2 class="sec-title">🔍 なぜこの結果になったか</h2>
+      ${items.map(x => `
+        <article class="res-item ${x.level}">
+          <div class="res-head"><span class="mark ${x.level}">${{ good: '◎ 良い', ok: '△ 注意', bad: '× 要改善' }[x.level]}</span><h3>${esc(x.title)}</h3></div>
+          <p class="reason">${esc(x.text)}</p>
+        </article>`).join('')}
+
+      ${isMeta ? '' : renderKwResults(res)}
+
+      <details class="tc-guide sim-guide">
+        <summary>計算のしくみ</summary>
+        ${isMeta ? `<dl>
+          <dt>表示回数</dt><dd>予算 ÷ CPM × 1000（CPMは業種の目安 × 配置・オーディエンスの狭さ・特別カテゴリ・広告セット数の補正）</dd>
+          <dt>リーチ</dt><dd>オーディエンス × (1 − e^(−表示回数 ÷ オーディエンス))</dd>
+          <dt>クリック数</dt><dd>表示回数 × クリック率（業種の目安 × 素材 × パフォーマンスの目標 × 広告疲れ）</dd>
+          <dt>コンバージョン</dt><dd>クリック数 × 成約率（業種の目安 × LP × 検討期間 × 目標 × 地域 × 計測 × 学習）</dd>
+        </dl>` : `<dl>
+          <dt>表示回数</dt><dd>想定検索数 × 商圏 × 配信地域 × マッチタイプの広がり × 掲載される割合（関係ない検索は、除外で防げなかった分が加わる）</dd>
+          <dt>クリック数</dt><dd>表示回数 × クリック率（業種の目安 × 検索意図 × マッチタイプ × 品質）</dd>
+          <dt>クリック単価</dt><dd>キーワードの想定CPC × マッチタイプ × 品質 × 地域 × 入札戦略（手動入札は入札額が上限）</dd>
+          <dt>コンバージョン</dt><dd>クリック数 × 成約率（業種の目安 × 検索意図 × LP × 検討期間 × 地域 × 入札戦略）</dd>
+          <dt>予算</dt><dd>費用が予算を超える場合は、全体を予算に合わせて縮める</dd>
+        </dl>`}
+        <p class="sim-hint">毎回、表示回数±${Math.round(B.noise.impressions * 100)}%・クリック率±${Math.round(B.noise.ctr * 100)}%・クリック単価±${Math.round(B.noise.cpc * 100)}%・成約率±${Math.round(B.noise.cvr * 100)}%のランダムなブレが入ります。目安の数値は sim-benchmarks.js にまとめています。</p>
+      </details>
+
+      <div class="end-actions">
+        <button type="button" class="btn-ghost" data-action="sim-back-setup">← 設定を直す</button>
+        <button type="button" class="btn-ghost" data-action="sim-reroll">🎲 ブレを変えてもう一度</button>
+        <button type="button" class="btn-primary" disabled title="次の段階で追加予定です">次へ：運用改善（準備中）</button>
+      </div>`;
+  }
+
+  function renderKwResults(res) {
+    const rows = res.rows.slice().sort((a, b) => b.cost - a.cost);
+    return `<section class="field">
+      <div class="field-head"><h3>🔑 キーワード別の結果</h3></div>
+      <ul class="sim-kwres">${rows.map(x => `
+        <li class="${x.conv ? 'good' : x.cost > st.karte.targetCpa ? 'bad' : 'ok'}">
+          <div class="sim-kwres-head"><b>${esc(MATCH_CODE[x.match](x.text))}</b><span class="tag tag-level">${esc(B.match[x.match].label)}・品質${QUALITY_LABEL[x.quality]}</span></div>
+          <p class="sim-kwres-nums">
+            <span>表示 <b>${fmt(x.imp)}</b></span><span>クリック <b>${fmt(x.clicks)}</b></span><span>CTR <b>${x.imp ? pct(x.clicks / x.imp, 1) : '―'}</b></span>
+            <span>CPC <b>${yen(x.cpc)}</b></span><span>費用 <b>${yen(x.cost)}</b></span><span>CV <b>${fmt(x.conv)}</b></span><span>CPA <b>${x.conv ? yen(x.cost / x.conv) : '―'}</b></span>
+          </p>
+          ${x.irrClicks ? `<p class="sim-kwres-why">うち関係ない検索：${fmt(x.irrClicks)}クリック・約${yen(x.irrCost)}</p>` : ''}
+          ${x.clicks === 0 ? '<p class="sim-kwres-why">広告がほとんど表示されていません（除外キーワードの打ち消し・入札額・予算を確認）</p>' : ''}
+        </li>`).join('')}</ul>
+    </section>`;
   }
 
   /* ---------- 案件カルテのパネル（設定中にいつでも見返せる） ---------- */
@@ -1053,6 +1398,7 @@
     st.karte = blankKarte();
     st.sampleId = null;
     st.setup = null;
+    st.seed = 0;
     st.dirty = false;
     render();
     showSim();
@@ -1143,6 +1489,16 @@
         st.phase = 'setupResult';
         render();
         window.scrollTo(0, 0);
+        break;
+      case 'sim-to-result':
+        if (!st.seed) newSeed();
+        st.phase = 'result';
+        render();
+        window.scrollTo(0, 0);
+        break;
+      case 'sim-reroll':
+        newSeed();
+        renderKeep();
         break;
       case 'sim-back-setup':
         st.phase = 'setup';

@@ -23,7 +23,8 @@
  *   ans      : 正解 'add'(使う) / 'negative'(除外) / 'skip'(使わない)
  *   best     : ans が 'add' のとき、◎になるマッチタイプ
  *   ok       : △になる回答（'exact' / 'phrase' / 'broad' / 'negative' / 'skip'）
- *   negGroup : 除外したときに防げる「関係ない検索」の種類（negativeGroups の id）
+ *   negGroup : 除外したときに防げる「関係ない検索」の種類（negativeGroups の id。'none' は防げるものがない）
+ *   blocks   : 除外すると、良い検索まで減ってしまう場合 { themes:[減るキーワードのテーマ], ratio:減る割合 }
  *   reason   : 解説
  * negativeGroups[業種] : 関係ない検索の種類 { id, label, share(関係ない検索のうちの割合), words(自分で除外キーワードを入れたときの判定) }
  * headlines[業種] : 広告見出しの候補 { text, quality:'high'|'mid'|'violation', themes:[], reason }
@@ -299,7 +300,7 @@ window.SIM_CASES = {
         reason: '一語だけの「ダイエット」は、レシピ・サプリ・運動方法など意味が広すぎます。検索数が多いぶん、予算5万円では一瞬で使い切ってしまいます。' },
       { kw: 'パーソナルジム 安い', intent: 'mid', cpc: 280, volume: 800, theme: 'general', ans: 'skip', best: [], ok: ['phrase', 'negative'],
         reason: '価格を重視している人は、2ヶ月20万円のコースでは成約しにくい傾向があります。使わないか、除外してもよいキーワードです。' },
-      { kw: '無料', intent: 'low', cpc: 0, volume: 0, theme: '', ans: 'skip', best: [], ok: [], negGroup: 'none',
+      { kw: '無料', intent: 'low', cpc: 0, volume: 0, theme: '', ans: 'skip', best: [], ok: [], negGroup: 'none', blocks: { themes: ['trial', 'general', 'women'], ratio: 0.35 },
         reason: '【注意】このジムは「無料体験」が目的です。「無料」を除外すると「パーソナルジム 無料体験」という一番大事な検索にも広告が出なくなります。除外キーワードは、自分の商品と矛盾しないか必ず確認しましょう。' },
       { kw: '求人', intent: 'low', cpc: 0, volume: 0, theme: '', ans: 'negative', best: [], ok: [], negGroup: 'job',
         reason: '「パーソナルトレーナー 求人」など、働く場所を探している人の検索です。必ず除外しましょう。' },

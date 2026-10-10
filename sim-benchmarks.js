@@ -82,13 +82,14 @@ window.SIM_BENCH = {
   /* ---------- 入札戦略（Google検索） ----------
    * baseShare : 掲載される割合（インプレッションシェア）の基準
    * cpc       : クリック単価の倍率
+   * cvr       : 成約率の倍率（自動入札は成約しやすい検索に寄せて入札する／クリック数の最大化は安いクリックに寄りがち）
    * needsConversion : 計測（コンバージョン）がないと正しく動かない戦略なら true
    */
   bidding: {
-    manual:      { label: '手動入札（クリック単価を自分で決める）', baseShare: null, cpc: 1.0 },
-    clicks:      { label: 'クリック数の最大化',                     baseShare: 0.6,  cpc: 1.05 },
-    conversions: { label: 'コンバージョン数の最大化',               baseShare: 0.6,  cpc: 1.1, needsConversion: true },
-    targetCpa:   { label: '目標コンバージョン単価（目標CPA）',      baseShare: 0.6,  cpc: 1.0, needsConversion: true }
+    manual:      { label: '手動入札（クリック単価を自分で決める）', baseShare: null, cpc: 1.0,  cvr: 1.0 },
+    clicks:      { label: 'クリック数の最大化',                     baseShare: 0.6,  cpc: 1.05, cvr: 0.9 },
+    conversions: { label: 'コンバージョン数の最大化',               baseShare: 0.6,  cpc: 1.1,  cvr: 1.15, needsConversion: true },
+    targetCpa:   { label: '目標コンバージョン単価（目標CPA）',      baseShare: 0.6,  cpc: 1.0,  cvr: 1.2,  needsConversion: true }
   },
   manualShare: { min: 0.1, max: 0.9, base: 0.6, power: 1.2 }, // 手動入札：掲載率 = base × (入札額 ÷ 目安CPC)^power（min〜maxに収める）
   strictTargetCpa: { ratio: 0.7, shareFactor: 0.5 },           // 目標CPAが目安の70%未満だと、掲載率×0.5
@@ -120,6 +121,7 @@ window.SIM_BENCH = {
     partial: { label: '一部だけ計測（電話だけ・フォームだけなど）' },
     none:    { label: '計測していない' }
   },
+  partialMeasuredRatio: 0.6, // 一部だけ計測のとき、管理画面で数えられる成果の割合
   noMeasurement: {
     autoBidCpc: 1.2,         // 計測なしで自動入札を使ったときのクリック単価の倍率
     autoBidSwing: [0.5, 1.1], // 同じく成果の倍率（この範囲でランダム）
@@ -132,6 +134,15 @@ window.SIM_BENCH = {
     interestNarrow: 0.3,      // 興味関心で絞ったときに残る人数の割合
     smallAudience: { under: 50000, cpm: 1.5 },   // 人数がこれ未満ならCPM×1.5
     specialCategoryCpm: 1.1,  // 特別な広告カテゴリ（ターゲティングが制限される）のCPM倍率
+    placementCpm: { auto: 1.0, instagram: 1.15, facebook: 1.1 }, // 配置を絞るとCPMが上がる
+    // パフォーマンスの目標ごとの倍率（ctr：クリック率／cvr：成約率）
+    optimization: {
+      conversions: { ctr: 1.0, cvr: 1.3 },
+      lpviews:     { ctr: 1.1, cvr: 1.0 },
+      clicks:      { ctr: 1.3, cvr: 0.7 },
+      reach:       { ctr: 0.6, cvr: 0.5 }
+    },
+    adsetOverlapCpm: 0.03,    // 広告セットを1つ増やすごとのCPMの上昇（同じ人を取り合う）
     fatigue: { from: 4, ctrDropPerFreq: 0.08 },  // 月のフリークエンシーが4を超えると、1回ごとにクリック率-8%
     learning: {
       weeklyConversions: 50,  // 学習完了に必要な1週間のコンバージョン数
@@ -152,6 +163,9 @@ window.SIM_BENCH = {
     bigBudgetChange: 0.3            // 予算をこの割合以上変えたら「大きな変更」
   },
 
+  /* ---------- 除外向けの単語をキーワードとして「使う」にしたとき ---------- */
+  termKeyword: { volume: 300, cpc: 100 },
+
   /* ---------- 予算 ---------- */
   budget: {
     daysPerMonth: 30.4,
@@ -162,6 +176,7 @@ window.SIM_BENCH = {
   noise: {
     impressions: 0.08,
     ctr: 0.10,
+    cpc: 0.06,
     cvr: 0.20
   },
 
