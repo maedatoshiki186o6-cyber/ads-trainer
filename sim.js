@@ -78,6 +78,7 @@
     karte: blankKarte(),
     sampleId: null,
     setup: null,
+    karteOpen: false, // 画面右下の「カルテ」パネルを開いているか
     dirty: false
   };
 
@@ -291,7 +292,8 @@
       </div>
       <p class="sim-disclaimer">${DISCLAIMER}</p>
       ${body}
-      <p class="sim-disclaimer sim-disclaimer-foot">${DISCLAIMER}</p>`;
+      <p class="sim-disclaimer sim-disclaimer-foot">${DISCLAIMER}</p>
+      ${renderDock()}`;
   }
 
   function renderKarte() {
@@ -977,6 +979,74 @@
     $('#sim-neg-text').focus();
   }
 
+  /* ---------- 案件カルテのパネル（設定中にいつでも見返せる） ---------- */
+  const DOCK_PHASES = ['setup', 'setupResult', 'result', 'improve'];
+  function renderDock() {
+    if (!DOCK_PHASES.includes(st.phase)) return '';
+    const k = st.karte, ind = B.industries[k.industry];
+    const media = C.media.find(m => m.value === k.media);
+    const row = (dt, dd) => dd ? `<dt>${esc(dt)}</dt><dd>${dd}</dd>` : '';
+    const lead = k.cvType === 'lead';
+    return `
+      <button type="button" class="sim-dock-btn" id="sim-dock-btn" aria-expanded="${st.karteOpen}" aria-controls="sim-dock" title="クリックまたは長押しで、案件カルテを表示／非表示">
+        <span aria-hidden="true">ℹ️</span><span class="sim-dock-btn-label">カルテ</span>
+      </button>
+      <aside class="sim-dock" id="sim-dock" aria-label="案件カルテ" ${st.karteOpen ? '' : 'hidden'}>
+        <div class="sim-dock-head"><strong>📋 案件カルテ</strong><button type="button" class="x" data-action="sim-dock-close" aria-label="カルテを閉じる">×</button></div>
+        <div class="sim-dock-body">
+          <p class="sim-dock-title">${esc(ind.icon)} ${esc(ind.label)}｜${esc(media.label)}</p>
+          <div class="sim-dock-kpis">
+            <div><small>目標CV数</small><b>${fmt(k.targetCount)}件</b></div>
+            <div><small>目標CPA</small><b>${yen(k.targetCpa)}</b></div>
+            <div><small>上限CPA</small><b>${k.upperCpa ? yen(k.upperCpa) : '―'}</b></div>
+          </div>
+          <dl>
+            ${row('商圏', `${esc(labelOf('area', k.area))}${(k.areaName || '').trim() ? `（${esc(k.areaName.trim())}）` : ''}`)}
+            ${row('予算', `月${esc(manYen(k.budget))}（1日約${yen(k.budget / B.budget.daysPerMonth)}）`)}
+            ${row('目的', esc(labelOf('goal', k.goal)))}
+            ${row('CVの種類', esc(lead ? '見込み客' : '売上'))}
+            ${row('売上目標', yen(k.salesTarget))}
+            ${row('客単価', yen(k.price))}
+            ${lead ? row('成約率', `${k.closeRate}%`) : ''}
+            ${row('粗利率', k.margin ? `${k.margin}%` : '未入力')}
+            ${row('ターゲット', `${esc(labelOf('targetAge', k.targetAge))}・${esc(labelOf('targetGender', k.targetGender))}`)}
+            ${row('検討期間', esc(labelOf('consideration', k.consideration)))}
+            ${row('計測', esc(labelOf('measurement', k.measurement)))}
+            ${row('月のCV数', esc(labelOf('monthlyCv', k.monthlyCv)))}
+            ${row('過去実績', esc(labelOf('history', k.history)))}
+            ${row('素材', esc(labelOf('creative', k.creative)))}
+            ${row('LP', esc(labelOf('lp', k.lp)))}
+            ${k.media === 'meta' ? row('特別カテゴリ', esc(labelOf('specialCategory', k.specialCategory))) : ''}
+            ${row('メモ', (k.memo || '').trim() ? esc(k.memo.trim()) : '')}
+          </dl>
+        </div>
+      </aside>`;
+  }
+  function toggleDock(open = !st.karteOpen) {
+    st.karteOpen = open;
+    const dock = $('#sim-dock'), btn = $('#sim-dock-btn');
+    if (!dock) return;
+    dock.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  }
+  // クリック（タップ）でも長押しでも切り替える。長押しの直後に続くクリックは無視する
+  let pressTimer = null, longPressAt = 0;
+  view.addEventListener('pointerdown', e => {
+    if (!e.target.closest('#sim-dock-btn')) return;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => { longPressAt = Date.now(); toggleDock(); }, 450);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => view.addEventListener(type, () => clearTimeout(pressTimer), true));
+  view.addEventListener('click', e => {
+    if (!e.target.closest('#sim-dock-btn')) return;
+    if (Date.now() - longPressAt < 800) return;
+    toggleDock();
+  });
+  view.addEventListener('contextmenu', e => { if (e.target.closest('#sim-dock-btn')) e.preventDefault(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && st.karteOpen && !view.hidden && $('#modal').hidden) toggleDock(false);
+  });
+
   /* ---------- events ---------- */
   function startSim() {
     st.phase = 'karte';
@@ -1040,6 +1110,7 @@
         break;
       }
       case 'sim-help': openHelp(t.dataset.id); break;
+      case 'sim-dock-close': toggleDock(false); break;
       case 'sim-to-setup':
         if (setupStale()) initSetup();
         st.phase = 'setup';
