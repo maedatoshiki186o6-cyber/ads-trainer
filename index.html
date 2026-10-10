@@ -796,6 +796,39 @@
   .sim-kpi-cv { box-shadow: inset 0 0 0 1px var(--accent); }
   .sim-kwres-nums { margin: 6px 0 0; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 14px; }
   .sim-kwres-nums b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .sim-up { color: var(--good) !important; } .sim-down { color: var(--bad) !important; }
+  .sim-kpis small.sim-up, .sim-kpis small.sim-down { font-weight: 500; }
+  .sim-explain { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+  .sim-explain li { font-size: 13px; padding: 8px 10px; border-radius: var(--radius); background: var(--surface-2); }
+  .sim-explain li b { display: block; font-weight: 500; }
+  .sim-explain li.good b { color: var(--good); } .sim-explain li.ok b { color: var(--ok); } .sim-explain li.bad b { color: var(--bad); }
+  .sim-explain li span { color: var(--muted); }
+  .sim-report { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+  .sim-report li { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .sim-report li.blocked { background: var(--surface-2); }
+  .sim-report li.blocked .sim-report-head b { text-decoration: line-through; color: var(--muted); }
+  .sim-report-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .sim-report-head b { font-size: 14px; font-weight: 500; }
+  .btn-ghost.sm.on { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+  .sim-kwres li.sim-paused { opacity: .6; border-left-color: var(--muted); }
+  .sim-changes-list { margin: 8px 0 0; padding-left: 1.2em; font-size: 14px; display: grid; gap: 4px; }
+  .sim-changes-list.good li::marker { color: var(--good); } .sim-changes-list.bad li::marker { color: var(--bad); }
+  .sim-sub { margin: 16px 0 0; font-size: 14px; font-weight: 500; }
+  .sim-chart { margin: 12px 0 20px; }
+  .sim-chart figcaption { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+  .sim-chart-plot { position: relative; display: grid; gap: 8px; padding-top: 22px; }
+  .sim-chart-plot:has(.sim-chart-ref.upper) { padding-top: 38px; }
+  .sim-chart-row { display: grid; grid-template-columns: 72px 1fr 96px; gap: 8px; align-items: center; font-size: 13px; }
+  .sim-chart-lab { color: var(--muted); }
+  .sim-chart-track { height: 18px; position: relative; }
+  .sim-chart-track i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+  .sim-chart-row:hover .sim-chart-track i { opacity: .8; }
+  .sim-chart-row b { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .sim-chart-ref { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--muted); pointer-events: none; }
+  .sim-chart-ref em { position: absolute; top: 0; left: 4px; font-size: 11px; font-style: normal; color: var(--muted); white-space: nowrap; background: var(--surface); padding: 0 3px; z-index: 1; }
+  .sim-chart-ref.upper { border-left-color: var(--bad); }
+  .sim-chart-ref.upper em { color: var(--bad); top: 16px; }
+  .sim-month-table th, .sim-month-table td { white-space: nowrap; }
   @media (max-width: 560px) {
     .sim-karte { grid-template-columns: 1fr; gap: 0; }
     .sim-karte dd { margin-bottom: 8px; }
