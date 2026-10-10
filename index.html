@@ -722,6 +722,27 @@
   .sim-kpis b { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .sim-counts { margin: 24px 0 4px; }
   .res-item.sim-info { border-left-color: var(--accent); }
+  .sim-label-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+  .sim-label-row .sim-label { margin: 0; }
+  legend.sim-label-row { margin-bottom: 8px; }
+  .sim-label-row .i-btn { margin-left: auto; }
+  div.sim-label-row { margin: 0 0 8px; }
+  .sim-req { margin-left: 0; }
+  .sim-item .num-wrap { max-width: 280px; }
+  .sim-echo { margin: 6px 0 0; min-height: 1em; }
+  .sim-warn { color: var(--bad); }
+  .sim-item .opts { margin-top: 2px; }
+  .sim-calc { margin: 16px 0 8px; padding: 16px; border-radius: var(--radius); background: var(--surface-2); }
+  .sim-calc h4 { margin: 0 0 8px; font-size: 15px; font-weight: 500; }
+  .sim-calc .sim-hint { margin: 8px 0 0; }
+  .sim-calc .sim-kpis div { background: var(--surface); }
+  .sim-kpis div small + small { margin-top: 2px; }
+  .sim-formula { margin: 0; padding-left: 0; list-style: none; font-size: 14px; display: grid; gap: 6px; }
+  .sim-formula li { background: var(--surface); border-radius: var(--radius); padding: 8px 12px; }
+  .sim-formula li > b:first-child { display: block; font-size: 13px; color: var(--accent); }
+  .sim-alert { margin: 12px 0 0; padding: 10px 14px; border-radius: var(--radius); font-size: 14px; }
+  .sim-alert.bad { background: var(--bad-soft); color: var(--bad); }
+  .sim-alert.ok { background: var(--ok-soft); color: var(--ok); }
   @media (max-width: 560px) {
     .sim-karte { grid-template-columns: 1fr; gap: 0; }
     .sim-karte dd { margin-bottom: 8px; }

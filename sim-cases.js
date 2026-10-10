@@ -1,12 +1,16 @@
 /*
  * 実践シミュレーション — 案件カルテの選択肢・サンプル案件
  *
- * karteGroups : カルテ入力画面のまとまり { title, fields:[項目ID] }
+ * karteGroups : カルテ入力画面のまとまり { title, fields:[項目ID], calc:true なら目標の自動計算を表示 }
  * karteFields : 項目ごとの定義
- *   type    : 'single'(1つ選ぶ) / 'text'(自由入力)
- *   options : 選択肢 { value, label, num(計算に使う数値・任意) }
+ *   type    : 'single'(1つ選ぶ) / 'number'(数値入力) / 'text'(自由入力)
+ *   options : 選択肢 { value, label, num(計算に使う数値・任意), desc(補足・任意) }
  *             optionsFrom: 'industries' の場合は sim-benchmarks.js の業種一覧を使う
  *   hint    : 項目の下に出す短い説明
+ *   help    : ⓘボタンで表示する解説 { what:どういうものか, example:例, tip:ポイント }
+ *   unit    : 数値入力の単位（'円' / '%'）、min・max・step・placeholder
+ *   optional: 未入力でもよい項目なら true
+ *   showIf  : { field, in:[値] } 条件を満たすときだけ表示・入力する
  * samples : サンプル案件 { id, icon, title, summary, karte:{項目ID:値} }
  */
 window.SIM_CASES = {
@@ -17,8 +21,8 @@ window.SIM_CASES = {
   ],
 
   karteGroups: [
-    { title: 'お店・商品について',   fields: ['industry', 'area', 'price', 'consideration', 'targetAge', 'targetGender'] },
-    { title: '広告の目的と予算',     fields: ['goal', 'budget', 'targetCpa', 'targetCount'] },
+    { title: 'お店・商品について',   fields: ['industry', 'area', 'consideration', 'targetAge', 'targetGender'] },
+    { title: '広告の目的と目標',     fields: ['goal', 'cvType', 'salesTarget', 'price', 'closeRate', 'margin', 'budget'], calc: true },
     { title: '計測とこれまでの実績', fields: ['measurement', 'monthlyCv', 'history'] },
     { title: '素材・LP・広告の決まり', fields: ['creative', 'lp', 'specialCategory'] },
     { title: 'メモ',                 fields: ['memo'] }
@@ -34,16 +38,6 @@ window.SIM_CASES = {
         { value: 'pref',     label: '都道府県' },
         { value: 'region',   label: '複数の都道府県（地方）' },
         { value: 'national', label: '全国' }
-      ]
-    },
-    price: {
-      label: '客単価（1人あたりの売上）', type: 'single',
-      options: [
-        { value: 'u5k',    label: '5千円未満',       num: 3000 },
-        { value: 'u30k',   label: '5千〜3万円',      num: 15000 },
-        { value: 'u100k',  label: '3万〜10万円',     num: 60000 },
-        { value: 'u1m',    label: '10万〜100万円',   num: 300000 },
-        { value: 'o1m',    label: '100万円以上',     num: 2000000 }
       ]
     },
     consideration: {
@@ -81,17 +75,58 @@ window.SIM_CASES = {
         { value: 'trial',   label: '無料体験・来場' }
       ]
     },
+    cvType: {
+      label: 'CVの種類（広告の成果を何にするか）', type: 'single',
+      options: [
+        { value: 'sales', label: 'CV＝売上（購入）', desc: 'ネットショップなど、広告からそのまま購入される' },
+        { value: 'lead',  label: 'CV＝見込み客（問い合わせ・予約など）', desc: '制作会社・士業など、問い合わせのあとに商談・来店を経て契約になる' }
+      ],
+      help: {
+        what: '広告の「成果（コンバージョン＝CV）」が、そのまま売上になるのか、売上の手前の「見込み客」なのかを選びます。目標CV数の計算方法が変わります。',
+        example: '売上：ネットショップで商品が買われる／見込み客：歯科の予約、ジムの無料体験、士業への相談、不動産の問い合わせ',
+        tip: '見込み客の場合、CVが出ても全員が契約するわけではありません。そのため「成約率」を使って、必要なCV数を多めに見積もります。'
+      }
+    },
+    salesTarget: {
+      label: '月の売上目標（広告経由）', type: 'number', unit: '円', min: 0, step: 10000, placeholder: '例：500000',
+      help: {
+        what: '広告から1ヶ月にどれだけの売上を作りたいか、の目標です。お店全体の売上ではなく「広告を見て来たお客さんからの売上」で考えます。',
+        example: '月50万円の売上を広告から作りたい → 500000 と入力',
+        tip: 'ここから逆算して「何件の成果が必要か」を出します。目標が高すぎると、予算から見たCPAが厳しくなります。'
+      }
+    },
+    price: {
+      label: '1件あたりの売上（客単価）', type: 'number', unit: '円', min: 0, step: 1000, placeholder: '例：5000',
+      help: {
+        what: 'お客さん1人（1件の契約・購入）あたりの平均の売上です。',
+        example: 'ネットショップの平均購入額5,000円／パーソナルジムの2ヶ月コース20万円／賃貸仲介の手数料（家賃1ヶ月分）7万円',
+        tip: 'リピートが多い商売なら、1回分ではなく「お客さん1人が平均で使ってくれる金額（LTV）」で考える方法もあります。迷ったら、まずは1回分で計算しましょう。'
+      }
+    },
+    closeRate: {
+      label: '成約率（問い合わせ → 契約になる割合）', type: 'number', unit: '%', min: 1, max: 100, step: 1, placeholder: '例：25',
+      showIf: { field: 'cvType', in: ['lead'] },
+      help: {
+        what: '広告から来た問い合わせ・予約のうち、実際に契約・来店・購入までつながる割合です。',
+        example: '問い合わせ20件のうち5件が契約 → 5 ÷ 20 ＝ 25%',
+        tip: '広告の管理画面の「コンバージョン率（クリック→問い合わせ）」とは別物です。こちらは問い合わせの「あと」の割合で、営業や接客の力で変わります。分からなければ、過去の問い合わせと契約の件数から計算してみましょう。'
+      }
+    },
+    margin: {
+      label: '粗利率（任意）', type: 'number', unit: '%', min: 1, max: 100, step: 1, placeholder: '例：60', optional: true,
+      help: {
+        what: '売上から、商品の仕入れ代や材料費などの「原価」を引いた残り（粗利）が、売上の何%かです。',
+        example: '5,000円の商品の原価が2,000円 → 粗利3,000円 → 粗利率60%',
+        tip: '粗利率を入れると、「1件の成果にいくらまで広告費をかけても赤字にならないか（上限CPA）」が分かります。サービス業は粗利率が高く、物販は低めになりがちです。'
+      }
+    },
     budget: {
-      label: '月の広告予算', type: 'single',
-      options: [30000, 50000, 100000, 200000, 300000, 500000, 1000000].map(n => ({ value: String(n), label: (n / 10000) + '万円', num: n }))
-    },
-    targetCpa: {
-      label: '目標CPA（成果1件にかけてよい広告費）', type: 'single',
-      options: [1000, 3000, 5000, 10000, 20000, 30000, 50000, 100000].map(n => ({ value: String(n), label: n.toLocaleString('ja-JP') + '円', num: n }))
-    },
-    targetCount: {
-      label: '目標件数（1ヶ月）', type: 'single',
-      options: [5, 10, 20, 30, 50, 100].map(n => ({ value: String(n), label: n + '件', num: n }))
+      label: '月の広告予算', type: 'number', unit: '円', min: 0, step: 10000, placeholder: '例：100000',
+      help: {
+        what: '1ヶ月に広告に使うお金です。Google・Metaでは「1日の予算」で設定することが多いので、月の予算 ÷ 30.4 が1日の目安になります。',
+        example: '月10万円 → 1日あたり約3,300円',
+        tip: '予算 ÷ 目標CV数 が「予算から見たCPA（1件にかけられる広告費）」になります。これが業種の目安より低すぎると、目標の達成は難しくなります。'
+      }
     },
     measurement: {
       label: '計測状況', type: 'single',
@@ -158,11 +193,11 @@ window.SIM_CASES = {
       summary: '予約を増やしたい。計測・LPは準備済みで、過去にも成果が出ている「基本に忠実」な案件。',
       karte: {
         media: 'google',
-        industry: 'dental', area: 'city', price: 'u30k', consideration: 'weeks', targetAge: 'middle', targetGender: 'both',
-        goal: 'booking', budget: '100000', targetCpa: '5000', targetCount: '20',
+        industry: 'dental', area: 'city', consideration: 'weeks', targetAge: 'middle', targetGender: 'both',
+        goal: 'booking', cvType: 'lead', salesTarget: 320000, price: 20000, closeRate: 80, margin: 60, budget: 100000,
         measurement: 'full', monthlyCv: '10', history: 'good',
         creative: 'image', lp: 'dedicated', specialCategory: 'none',
-        memo: '一般診療の予約に加えて、単価の高いインプラント（自費診療）の相談も増やしたい。'
+        memo: '一般診療の予約に加えて、単価の高いインプラント（自費診療）の相談も増やしたい。予約のうち約8割が実際に来院する。'
       }
     },
     {
@@ -172,11 +207,11 @@ window.SIM_CASES = {
       summary: '無料体験を増やしたい。ただし計測なし・LPなしで予算も少なめ。改善点の多い案件。',
       karte: {
         media: 'google',
-        industry: 'gym', area: 'city', price: 'u1m', consideration: 'weeks', targetAge: 'middle', targetGender: 'female',
-        goal: 'trial', budget: '50000', targetCpa: '5000', targetCount: '10',
+        industry: 'gym', area: 'city', consideration: 'weeks', targetAge: 'middle', targetGender: 'female',
+        goal: 'trial', cvType: 'lead', salesTarget: 600000, price: 200000, closeRate: 30, margin: 70, budget: 50000,
         measurement: 'none', monthlyCv: '0', history: 'first',
         creative: 'image', lp: 'none', specialCategory: 'none',
-        memo: '2ヶ月20万円のダイエットコース。申し込みはInstagramのDMで受けている。'
+        memo: '2ヶ月20万円のダイエットコース。無料体験に来た人の約3割が入会する。申し込みはInstagramのDMで受けている。'
       }
     },
     {
@@ -186,11 +221,11 @@ window.SIM_CASES = {
       summary: '物件の問い合わせを増やしたい。Metaでは「特別な広告カテゴリ（住宅）」の申告が必要な案件。',
       karte: {
         media: 'meta',
-        industry: 'realestate', area: 'city', price: 'u100k', consideration: 'weeks', targetAge: 'young', targetGender: 'both',
-        goal: 'inquiry', budget: '200000', targetCpa: '10000', targetCount: '20',
+        industry: 'realestate', area: 'city', consideration: 'weeks', targetAge: 'young', targetGender: 'both',
+        goal: 'inquiry', cvType: 'lead', salesTarget: 350000, price: 70000, closeRate: 25, margin: 80, budget: 200000,
         measurement: 'full', monthlyCv: '10', history: 'bad',
         creative: 'video', lp: 'dedicated', specialCategory: 'housing',
-        memo: '春の引っ越しシーズンに向けて、学生・新社会人向けの1K物件を中心に問い合わせを増やしたい。'
+        memo: '春の引っ越しシーズンに向けて、学生・新社会人向けの1K物件を中心に問い合わせを増やしたい。仲介手数料は家賃1ヶ月分（平均7万円）。問い合わせの約4件に1件が契約になる。'
       }
     }
   ]

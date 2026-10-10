@@ -40,7 +40,31 @@
   const labelOf = (id, v) => (optOf(id, v) || {}).label || '';
   const numOf = (id, v) => (optOf(id, v) || {}).num;
   const allFieldIds = () => C.karteGroups.flatMap(g => g.fields);
-  const requiredIds = () => allFieldIds().filter(id => fieldOf(id).type !== 'text');
+  // showIf の条件を満たすか（満たさない項目は表示・入力しない）
+  function shown(id, k = st.karte) {
+    const c = fieldOf(id).showIf;
+    return !c || c.in.includes(k[c.field]);
+  }
+  // 数値入力が正しい範囲か
+  function validNum(id, v) {
+    const f = fieldOf(id);
+    return typeof v === 'number' && isFinite(v) && v > 0 && (f.max == null || v <= f.max);
+  }
+  function filled(id, k = st.karte) {
+    const f = fieldOf(id), v = k[id];
+    if (f.type === 'number') return validNum(id, v) || (f.optional && v == null);
+    return f.type === 'text' || f.optional || !!v;
+  }
+  const requiredIds = () => allFieldIds().filter(id => fieldOf(id).type !== 'text' && shown(id));
+  // 表示用の値（数値は単位つき）
+  function valueText(id, k = st.karte) {
+    const f = fieldOf(id), v = k[id];
+    if (f.type === 'number') return v == null ? '未入力' : f.unit === '%' ? `${v}%` : yen(v);
+    if (f.type === 'text') return v;
+    return labelOf(id, v);
+  }
+  // 円の金額を「50万円」のような読みやすい形に
+  const manYen = v => v >= 10000 ? `${(v / 10000).toLocaleString('ja-JP', { maximumFractionDigits: 1 })}万円` : yen(v);
 
   function blankKarte() {
     const k = { media: document.body.classList.contains('theme-meta') ? 'meta' : 'google' };
@@ -56,7 +80,37 @@
     dirty: false
   };
 
-  const missing = () => requiredIds().filter(id => !st.karte[id]);
+  const missing = () => requiredIds().filter(id => !filled(id));
+
+  /* ---------- 目標CV数・目標CPAの自動計算 ----------
+   * 売上    ：目標CV数 = 売上目標 ÷ 客単価              上限CPA = 客単価 × 粗利率
+   * 見込み客：成約数   = 売上目標 ÷ 客単価
+   *           目標CV数 = 成約数 ÷ 成約率                 上限CPA = 客単価 × 粗利率 × 成約率
+   * 共通    ：予算から見たCPA = 月の広告予算 ÷ 目標CV数（件数は切り上げ）
+   */
+  const ceilCount = x => Math.ceil(x - 1e-9);
+  function goalsOf(k) {
+    const lead = k.cvType === 'lead';
+    if (!k.cvType || !validNum('salesTarget', k.salesTarget) || !validNum('price', k.price)) return null;
+    if (lead && !validNum('closeRate', k.closeRate)) return null;
+    const cr = lead ? k.closeRate / 100 : 1;
+    const dealsRaw = k.salesTarget / k.price;
+    const deals = ceilCount(dealsRaw);
+    const cvRaw = lead ? deals / cr : dealsRaw;
+    const cv = ceilCount(cvRaw);
+    const cpa = validNum('budget', k.budget) ? k.budget / cv : null;
+    const margin = validNum('margin', k.margin) ? k.margin / 100 : null;
+    const upper = margin ? k.price * margin * cr : null;
+    return { lead, cr, dealsRaw, deals, cvRaw, cv, cpa, margin, upper };
+  }
+  // 計算結果をカルテの目標欄に反映（あとの段階でもこの値を使う）
+  function syncGoals() {
+    const g = goalsOf(st.karte);
+    st.karte.targetCount = g ? g.cv : null;
+    st.karte.targetCpa = g && g.cpa ? Math.round(g.cpa) : null;
+    st.karte.upperCpa = g && g.upper ? Math.round(g.upper) : null;
+    return g;
+  }
 
   /* ---------- 目安の計算（カルテ診断用） ---------- */
   // 業種・LP・検討期間・素材・計測から見た「目安のCPA」
@@ -75,15 +129,25 @@
     return { cpc, cvr, cpa: cpc / cvr, ctr: ind.search.ctr };
   }
 
+  // 入力途中でも比べられるよう、未選択の項目は標準的な値で目安を出す
+  function benchLoose(k) {
+    if (!k.industry) return null;
+    const defaults = { lp: 'dedicated', consideration: 'weeks', creative: 'image', measurement: 'full' };
+    const k2 = Object.assign({}, k);
+    let partial = false;
+    for (const [id, v] of Object.entries(defaults)) if (!k2[id]) { k2[id] = v; partial = true; }
+    return Object.assign(benchOf(k2), { partial });
+  }
+
   function diagnose(k) {
     const out = [];
     const add = (level, title, text) => out.push({ level, title, text });
     const ind = B.industries[k.industry];
     const bench = benchOf(k);
-    const budget = numOf('budget', k.budget);
-    const tCpa = numOf('targetCpa', k.targetCpa);
-    const tCount = numOf('targetCount', k.targetCount);
-    const price = numOf('price', k.price);
+    const budget = k.budget;
+    const tCpa = k.targetCpa;
+    const tCount = k.targetCount;
+    const upper = k.upperCpa;
     const isMeta = k.media === 'meta';
     const benchCount = budget / bench.cpa;
 
@@ -91,29 +155,28 @@
     const ratio = tCpa / bench.cpa;
     const benchText = `この業種・条件での目安のCPAは約${yen(bench.cpa)}です（クリック単価 約${yen(bench.cpc)} ÷ 成約率 約${pct(bench.cvr)}）。`;
     if (ratio < B.diagnosis.cpaTight) {
-      add('bad', '目標CPAが厳しすぎます', `${benchText}目標の${yen(tCpa)}は目安の${Math.round(ratio * 100)}%で、達成はかなり難しい水準です。LPの改善などで成約率を上げるか、目標を見直しましょう。`);
+      add('bad', '目標CPAが厳しすぎます', `${benchText}予算から見た目標CPA ${yen(tCpa)}は目安の${Math.round(ratio * 100)}%で、達成はかなり難しい水準です。LPの改善などで成約率を上げるか、目標を見直しましょう。`);
     } else if (ratio > B.diagnosis.cpaLoose) {
-      add('good', '目標CPAには余裕があります', `${benchText}目標の${yen(tCpa)}なら、余裕をもって達成できる見込みです。件数を増やす方向も検討できます。`);
+      add('good', '目標CPAには余裕があります', `${benchText}予算から見た目標CPA ${yen(tCpa)}なら、余裕をもって達成できる見込みです。件数を増やす方向も検討できます。`);
     } else {
-      add('good', '目標CPAは目安どおりです', `${benchText}目標の${yen(tCpa)}は現実的な水準です。`);
+      add('good', '目標CPAは目安どおりです', `${benchText}予算から見た目標CPA ${yen(tCpa)}は現実的な水準です。`);
     }
 
-    // 予算と目標件数
-    const need = tCpa * tCount;
-    if (budget < need * 0.9) {
-      add('bad', '予算が目標件数に足りません', `目標CPA ${yen(tCpa)} × ${tCount}件 = ${yen(need)}必要ですが、予算は${yen(budget)}です。目標CPAどおりに取れても約${Math.floor(budget / tCpa)}件までです。`);
-    } else if (budget > need * 1.5) {
-      add('ok', '予算に対して目標件数が少なめです', `目標どおりなら${yen(need)}で済み、予算${yen(budget)}が余ります。件数の目標を上げるか、予算を減らせないか確認しましょう。`);
-    } else {
-      add('good', '予算と目標件数のバランスは取れています', `目標CPA ${yen(tCpa)} × ${tCount}件 = ${yen(need)}で、予算${yen(budget)}と見合っています。`);
-    }
-    out.push({ level: 'info', title: '目安どおりに進んだ場合', text: `予算${yen(budget)} ÷ 目安CPA ${yen(bench.cpa)} で、月に約${benchCount < 10 ? benchCount.toFixed(1) : fmt(benchCount)}件の見込みです。` });
+    out.push({ level: 'info', title: '目安どおりに進んだ場合', text: `予算${yen(budget)} ÷ 目安CPA ${yen(bench.cpa)} で、月に約${benchCount < 10 ? benchCount.toFixed(1) : fmt(benchCount)}件の見込みです（目標は${tCount}件）。` });
 
-    // 客単価とCPA
-    if (tCpa > price) {
-      add('bad', '目標CPAが客単価を上回っています', `客単価の目安は${yen(price)}です。1件の成果に客単価より多くの広告費をかけると、リピートや紹介がない限り赤字になります。`);
-    } else if (tCpa > price * 0.5) {
-      add('ok', '目標CPAが客単価に近いです', `客単価の目安${yen(price)}に対して、目標CPAが${yen(tCpa)}です。利益が残るか、リピート率も含めて確認しましょう。`);
+    // 上限CPA（赤字にならないか）
+    if (upper) {
+      const how = k.cvType === 'lead' ? `客単価${yen(k.price)} × 粗利率${k.margin}% × 成約率${k.closeRate}%` : `客単価${yen(k.price)} × 粗利率${k.margin}%`;
+      if (tCpa > upper) {
+        add('bad', 'この予算と目標では赤字になります', `上限CPA（${how}）は${yen(upper)}ですが、予算から見たCPAは${yen(tCpa)}で、1件あたり約${yen(tCpa - upper)}の赤字です。目標か予算を見直しましょう。`);
+      } else {
+        add('good', '上限CPAの範囲内です', `上限CPA（${how}）は${yen(upper)}で、予算から見たCPA ${yen(tCpa)}はその範囲に収まっています。`);
+      }
+      if (bench.cpa > upper) {
+        add('bad', '業種の目安CPAが上限CPAを超えています', `目安どおりの成果でも1件あたり約${yen(bench.cpa)}かかり、上限CPA ${yen(upper)}を超えます。このままでは広告で利益を出すのが難しいため、成約率・客単価を上げる工夫（LPの改善、セット販売など）も合わせて考えましょう。`);
+      }
+    } else {
+      add('ok', '粗利率が未入力です', '粗利率を入れると「1件にいくらまで広告費をかけても赤字にならないか（上限CPA）」が分かります。赤字かどうかを判断するため、分かる範囲で入れてみましょう。');
     }
 
     // 計測
@@ -251,7 +314,8 @@
       ${C.karteGroups.map(g => `
         <section class="field sim-group">
           <div class="field-head"><h3>${esc(g.title)}</h3></div>
-          ${g.fields.map(renderItem).join('')}
+          ${g.fields.filter(id => shown(id)).map(renderItem).join('')}
+          ${g.calc ? `<div class="sim-calc" id="sim-calc" aria-live="polite">${renderCalc()}</div>` : ''}
         </section>`).join('')}
 
       <div class="sim-submit">
@@ -259,6 +323,9 @@
         <button type="button" class="btn-primary" data-action="sim-diagnose" id="sim-diagnose" ${rest ? 'disabled' : ''}>カルテを確定して診断する</button>
       </div>`;
   }
+
+  const helpBtn = id => fieldOf(id).help ? `<button type="button" class="i-btn" data-action="sim-help" data-id="${id}" aria-label="${esc(fieldOf(id).label)}の解説">i</button>` : '';
+  const reqTag = (id, word) => `<span class="sim-req" id="sim-req-${id}" ${filled(id) ? 'hidden' : ''}>${word}</span>`;
 
   function renderItem(id) {
     const f = fieldOf(id), v = st.karte[id];
@@ -268,13 +335,108 @@
         <textarea id="sim-${id}" class="sim-text" rows="2" data-sim="${id}" placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea>
       </div>`;
     }
+    if (f.type === 'number') {
+      return `<div class="sim-item" id="sim-item-${id}">
+        <div class="sim-label-row"><label class="sim-label" for="sim-${id}">${esc(f.label)}</label>${reqTag(id, f.optional ? '範囲外' : '未入力')}${helpBtn(id)}</div>
+        ${f.hint ? `<p class="sim-hint">${esc(f.hint)}</p>` : ''}
+        <div class="num-wrap">
+          <input type="number" inputmode="numeric" id="sim-${id}" data-sim="${id}" value="${v ?? ''}" min="${f.min ?? 0}" ${f.max != null ? `max="${f.max}"` : ''} step="${f.step || 1}" placeholder="${esc(f.placeholder || '')}">
+          <span class="unit">${esc(f.unit)}</span>
+        </div>
+        <p class="sim-hint sim-echo" id="sim-echo-${id}">${echoOf(id)}</p>
+      </div>`;
+    }
+    const opts = optionsOf(id);
+    const list = opts.some(o => o.desc)
+      ? `<div class="opts">${opts.map(o => `
+          <label class="opt"><input type="radio" name="sim-${id}" value="${esc(o.value)}" data-sim="${id}" ${v === o.value ? 'checked' : ''}>
+            <span class="opt-main"><span class="opt-label">${esc(o.label)}</span><span class="opt-desc">${esc(o.desc)}</span></span></label>`).join('')}</div>`
+      : `<div class="sim-chips">${opts.map(o => `
+          <label class="sim-chip"><input type="radio" name="sim-${id}" value="${esc(o.value)}" data-sim="${id}" ${v === o.value ? 'checked' : ''}><span>${esc(o.label)}</span></label>`).join('')}</div>`;
     return `<fieldset class="sim-item" id="sim-item-${id}">
-      <legend class="sim-label">${esc(f.label)}${v ? '' : ' <span class="sim-req">未選択</span>'}</legend>
+      <legend class="sim-label sim-label-row"><span>${esc(f.label)}</span>${reqTag(id, '未選択')}${helpBtn(id)}</legend>
       ${f.hint ? `<p class="sim-hint">${esc(f.hint)}</p>` : ''}
-      <div class="sim-chips">${optionsOf(id).map(o => `
-        <label class="sim-chip"><input type="radio" name="sim-${id}" value="${esc(o.value)}" data-sim="${id}" ${v === o.value ? 'checked' : ''}><span>${esc(o.label)}</span></label>`).join('')}
-      </div>
+      ${list}
     </fieldset>`;
+  }
+
+  // 数値入力の下に出す補足（金額の読み方・範囲外の注意）
+  function echoOf(id) {
+    const f = fieldOf(id), v = st.karte[id];
+    if (v == null) return '';
+    if (!validNum(id, v)) return `<span class="sim-warn">${f.max != null ? `1〜${f.max}` : '1以上'}の数で入力してください</span>`;
+    if (id === 'budget') return `＝ ${manYen(v)}（1日あたり約${yen(v / B.budget.daysPerMonth)}）`;
+    return f.unit === '円' ? `＝ ${manYen(v)}` : '';
+  }
+
+  // 目標の自動計算（途中式つき）
+  function renderCalc() {
+    const k = st.karte, g = syncGoals();
+    const n = x => Math.abs(x - Math.round(x)) < 0.005 ? fmt(x) : x.toFixed(1);
+    const roundNote = (raw, c) => Math.abs(raw - c) < 0.005 ? '' : ` → <b>切り上げて${fmt(c)}件</b>`;
+    if (!g) {
+      const need = [!k.cvType && 'CVの種類', !validNum('salesTarget', k.salesTarget) && '月の売上目標', !validNum('price', k.price) && '客単価', k.cvType === 'lead' && !validNum('closeRate', k.closeRate) && '成約率'].filter(Boolean);
+      return `<h4>🧮 目標CV数・目標CPAの自動計算</h4><p class="sim-hint">${esc(need.join('・'))}を入れると、目標CV数と目標CPAを自動で計算します。</p>`;
+    }
+    const steps = [];
+    if (g.lead) {
+      steps.push(`<li><b>① 必要な成約数</b>＝ 月の売上目標 ${yen(k.salesTarget)} ÷ 客単価 ${yen(k.price)} ＝ ${n(g.dealsRaw)}件${roundNote(g.dealsRaw, g.deals)}</li>`);
+      steps.push(`<li><b>② 目標CV数（問い合わせ・予約の数）</b>＝ 必要な成約数 ${fmt(g.deals)}件 ÷ 成約率 ${k.closeRate}% ＝ ${n(g.cvRaw)}件${roundNote(g.cvRaw, g.cv)}</li>`);
+    } else {
+      steps.push(`<li><b>① 目標CV数（購入の数）</b>＝ 月の売上目標 ${yen(k.salesTarget)} ÷ 客単価 ${yen(k.price)} ＝ ${n(g.cvRaw)}件${roundNote(g.cvRaw, g.cv)}</li>`);
+    }
+    const no = g.lead ? ['③', '④'] : ['②', '③'];
+    steps.push(g.cpa
+      ? `<li><b>${no[0]} 予算から見たCPA</b>＝ 月の広告予算 ${yen(k.budget)} ÷ 目標CV数 ${fmt(g.cv)}件 ＝ ${yen(g.cpa)}</li>`
+      : `<li><b>${no[0]} 予算から見たCPA</b>：月の広告予算を入れると計算します</li>`);
+    steps.push(g.upper
+      ? `<li><b>${no[1]} 上限CPA（これを超えると赤字）</b>＝ 客単価 ${yen(k.price)} × 粗利率 ${k.margin}%${g.lead ? ` × 成約率 ${k.closeRate}%` : ''} ＝ ${yen(g.upper)}</li>`
+      : `<li><b>${no[1]} 上限CPA（これを超えると赤字）</b>：粗利率（任意）を入れると表示します</li>`);
+
+    const notes = [];
+    if (g.cpa && g.upper && g.cpa > g.upper) {
+      notes.push(`<p class="sim-alert bad">⚠️ <b>この予算と目標では赤字になります。目標か予算を見直しましょう。</b><br>予算から見たCPA ${yen(g.cpa)} が上限CPA ${yen(g.upper)} を、1件あたり約${yen(g.cpa - g.upper)}上回っています。</p>`);
+    }
+    const bench = benchLoose(k);
+    if (g.cpa && bench) {
+      const ratio = g.cpa / bench.cpa;
+      const more = bench.partial ? '（LP・検討期間などを選ぶと、目安がより正確になります）' : '';
+      if (ratio < B.diagnosis.cpaTight) {
+        notes.push(`<p class="sim-alert ok">⚠️ <b>達成が難しい目標です。</b><br>予算から見たCPA ${yen(g.cpa)} は、この業種の目安CPA 約${yen(bench.cpa)} の${Math.round(ratio * 100)}%しかありません。予算を増やすか、売上目標を下げる、成約率を上げるなどを検討しましょう。${more}</p>`);
+      } else {
+        notes.push(`<p class="sim-hint">業種の目安CPA 約${yen(bench.cpa)} と比べて、予算から見たCPAは目安の${Math.round(ratio * 100)}%です。${more}</p>`);
+      }
+    } else if (g.cpa) {
+      notes.push('<p class="sim-hint">業態を選ぶと、業種の目安CPAと比べられます。</p>');
+    }
+
+    return `<h4>🧮 目標CV数・目標CPAの自動計算</h4>
+      <ol class="sim-formula">${steps.join('')}</ol>
+      <div class="sim-kpis">
+        <div><small>目標CV数（月）</small><b>${fmt(g.cv)}件</b>${g.lead ? `<small>成約 ${fmt(g.deals)}件</small>` : ''}</div>
+        <div><small>目標CPA（予算から見たCPA）</small><b>${g.cpa ? yen(g.cpa) : '―'}</b></div>
+        <div><small>上限CPA</small><b>${g.upper ? yen(g.upper) : '―'}</b></div>
+      </div>
+      <p class="sim-hint">↑ この目標CV数と目標CPAを、案件カルテの目標として使います。</p>
+      ${notes.join('')}`;
+  }
+
+  function updateCalc() {
+    const el = $('#sim-calc');
+    if (el) el.innerHTML = renderCalc();
+  }
+
+  function openHelp(id) {
+    const f = fieldOf(id), h = f.help;
+    if (!h) return;
+    $('#modal-body').innerHTML = `<h2 id="modal-title">${esc(f.label)}</h2>
+      <h3>📖 どういうもの？</h3><p>${esc(h.what)}</p>
+      ${h.example ? `<h3>✏️ 例</h3><p>${esc(h.example)}</p>` : ''}
+      ${h.tip ? `<div class="tip"><strong>💡 ポイント</strong>${esc(h.tip)}</div>` : ''}`;
+    $('#modal').hidden = false;
+    $('.modal-dialog').scrollTop = 0;
+    document.body.classList.add('modal-open');
+    $('#modal-close').focus();
   }
 
   function renderDiagnosis() {
@@ -289,7 +451,10 @@
       <section class="field">
         <div class="field-head"><h3>${esc(media.icon)} ${esc(media.label)}｜${esc(B.industries[k.industry].label)}</h3></div>
         <dl class="sim-karte">
-          ${allFieldIds().filter(id => fieldOf(id).type !== 'text').map(id => `<dt>${esc(fieldOf(id).label.replace(/（.*?）/g, ''))}</dt><dd>${esc(labelOf(id, k[id]))}</dd>`).join('')}
+          ${allFieldIds().filter(id => fieldOf(id).type !== 'text' && shown(id)).map(id => `<dt>${esc(fieldOf(id).label.replace(/（.*?）/g, ''))}</dt><dd>${esc(valueText(id))}</dd>`).join('')}
+          <dt>目標CV数</dt><dd><b>${fmt(k.targetCount)}件</b>（月）</dd>
+          <dt>目標CPA</dt><dd><b>${yen(k.targetCpa)}</b>（予算から見たCPA）</dd>
+          <dt>上限CPA</dt><dd>${k.upperCpa ? yen(k.upperCpa) : '―（粗利率が未入力）'}</dd>
           ${k.memo.trim() ? `<dt>メモ</dt><dd>${esc(k.memo)}</dd>` : ''}
         </dl>
       </section>
@@ -378,8 +543,10 @@
         window.scrollTo(0, y);
         break;
       }
+      case 'sim-help': openHelp(t.dataset.id); break;
       case 'sim-diagnose':
-        if (missing().length) return;
+        syncGoals();
+        if (missing().length || !st.karte.targetCount || !st.karte.targetCpa) return;
         st.phase = 'diagnosis';
         render();
         window.scrollTo(0, 0);
@@ -392,20 +559,40 @@
     }
   });
 
+  const refreshReq = id => { const r = $(`#sim-req-${id}`); if (r) r.hidden = filled(id); };
+
   view.addEventListener('change', e => {
     const id = e.target.dataset.sim;
-    if (!id || fieldOf(id).type === 'text') return;
+    if (!id || fieldOf(id).type !== 'single') return;
     st.karte[id] = e.target.value;
     st.dirty = true;
-    const req = $(`#sim-item-${id} .sim-req`);
-    if (req) req.remove();
+    // この項目で表示が変わる項目（例：CVの種類 → 成約率）があれば描き直す
+    if (allFieldIds().some(x => (fieldOf(x).showIf || {}).field === id)) {
+      const y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+      return;
+    }
+    refreshReq(id);
+    updateCalc();
     updateRest();
   });
 
   view.addEventListener('input', e => {
     const id = e.target.dataset.sim;
-    if (!id || fieldOf(id).type !== 'text') return;
-    st.karte[id] = e.target.value;
+    if (!id) return;
+    const f = fieldOf(id);
+    if (f.type === 'text') {
+      st.karte[id] = e.target.value;
+    } else if (f.type === 'number') {
+      st.karte[id] = e.target.value === '' ? null : Number(e.target.value);
+      $(`#sim-echo-${id}`).innerHTML = echoOf(id);
+      refreshReq(id);
+      updateCalc();
+      updateRest();
+    } else {
+      return;
+    }
     st.dirty = true;
   });
 })();
