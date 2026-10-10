@@ -25,7 +25,7 @@
     { id: 'result', title: '成果シミュレーション' },
     { id: 'improve', title: '運用改善（3ヶ月）' }
   ];
-  const READY = ['karte']; // 実装済みの段階
+  const READY = ['karte', 'setup']; // 実装済みの段階
 
   /* ---------- カルテの項目 ---------- */
   const fieldOf = id => C.karteFields[id];
@@ -77,6 +77,7 @@
     phase: 'karte',
     karte: blankKarte(),
     sampleId: null,
+    setup: null,
     dirty: false
   };
 
@@ -270,14 +271,22 @@
     return `<ol class="sim-steps" aria-label="シミュレーションの段階">${PHASES.map((p, i) => `
       <li class="${i < cur ? 'done' : i === cur ? 'active' : ''}"><span class="num">${i + 1}</span><span>${esc(phaseTitle(p))}${READY.includes(p.id) ? '' : '<small>準備中</small>'}</span></li>`).join('')}</ol>`;
   }
-  const phaseKey = () => st.phase === 'diagnosis' ? 'karte' : st.phase;
+  const phaseKey = () => ({ diagnosis: 'karte', setupResult: 'setup' })[st.phase] || st.phase;
+
+  const SCREENS = {
+    karte:       { title: () => '案件カルテを作ろう', body: () => renderKarte() },
+    diagnosis:   { title: () => '案件カルテの診断', body: () => renderDiagnosis() },
+    setup:       { title: () => st.karte.media === 'meta' ? 'オーディエンスを設定しよう' : 'キーワードを選ぼう', body: () => st.karte.media === 'meta' ? renderSetupMeta() : renderSetupGoogle() },
+    setupResult: { title: () => st.karte.media === 'meta' ? 'オーディエンス設定の採点' : 'キーワード選びの採点', body: () => renderSetupResult() }
+  };
 
   function render() {
-    const body = st.phase === 'diagnosis' ? renderDiagnosis() : renderKarte();
+    const sc = SCREENS[st.phase];
+    const body = sc.body();
     view.innerHTML = `
       <div class="hero sim-hero">
         <p class="step-count">実践シミュレーション</p>
-        <h1>${st.phase === 'diagnosis' ? '案件カルテの診断' : '案件カルテを作ろう'}</h1>
+        <h1>${esc(sc.title())}</h1>
         ${renderSteps()}
       </div>
       <p class="sim-disclaimer">${DISCLAIMER}</p>
@@ -332,7 +341,9 @@
     if (f.type === 'text') {
       return `<div class="sim-item">
         <label class="sim-label" for="sim-${id}">${esc(f.label)}</label>
-        <textarea id="sim-${id}" class="sim-text" rows="2" data-sim="${id}" placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea>
+        ${f.rows === 1
+          ? `<input type="text" id="sim-${id}" class="sim-text" data-sim="${id}" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">`
+          : `<textarea id="sim-${id}" class="sim-text" rows="${f.rows || 2}" data-sim="${id}" placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea>`}
       </div>`;
     }
     if (f.type === 'number') {
@@ -479,7 +490,7 @@
 
       <div class="end-actions">
         <button type="button" class="btn-ghost" data-action="sim-edit">← カルテを修正する</button>
-        <button type="button" class="btn-primary" disabled title="次の段階で追加予定です">次へ：${esc(phaseTitle(PHASES[1]))}（準備中）</button>
+        <button type="button" class="btn-primary" data-action="sim-to-setup">次へ：${esc(phaseTitle(PHASES[1]))} →</button>
       </div>`;
   }
 
@@ -489,15 +500,500 @@
     $('#sim-diagnose').disabled = rest > 0;
   }
 
+  /* =========================================================
+     段階2：キーワード選び（Google）／オーディエンス設定（Meta）
+     ========================================================= */
+  const areaWord = () => (st.karte.areaName || '').trim() || '〇〇';
+  const fill = t => String(t).replace(/\{area\}/g, areaWord());
+  const kwList = () => C.keywords[st.karte.industry] || [];
+  const negGroups = () => C.negativeGroups[st.karte.industry] || [];
+  const hlList = () => C.headlines[st.karte.industry] || [];
+  const isTermKw = c => !c.volume; // 除外キーワード向けの単語（検索数を持たない候補）
+  const MATCH_CODE = { exact: t => `[${t}]`, phrase: t => `"${t}"`, broad: t => t };
+  const ACT_LABEL = { add: '使う', negative: '除外', skip: '使わない' };
+  const MARK_TEXT = { good: '◎ 正解', ok: '△ 惜しい', bad: '× 見直し' };
+  const PTS = { good: 2, ok: 1, bad: 0 };
+  const QUALITY_LABEL = { high: '高い', mid: 'ふつう', low: '低い' };
+  const special = () => !!st.karte.specialCategory && st.karte.specialCategory !== 'none';
+
+  function initSetup() {
+    st.setup = {
+      industry: st.karte.industry, media: st.karte.media,
+      kw: kwList().map(() => ({ act: null, match: null })),
+      customNeg: [], headlines: [], area: null, bidding: null, bid: null,
+      meta: {}
+    };
+  }
+  const setupStale = () => !st.setup || st.setup.industry !== st.karte.industry || st.setup.media !== st.karte.media;
+
+  // 配信地域の選択 → sim-benchmarks.js の geoFit のキー
+  function geoKey(sel) {
+    if (sel !== 'national') return sel;
+    if (st.karte.area === 'national') return 'match';
+    return B.industries[st.karte.industry].local ? 'nationalForLocal' : 'wider';
+  }
+  function geoOptions() {
+    const all = [
+      { value: 'narrower', label: '商圏より狭く', desc: 'お店の周り半径数kmなど。クリック単価は上がるが、成約率も上がる' },
+      { value: 'match', label: `商圏どおり（${labelOf('area', st.karte.area)}）`, desc: 'カルテの商圏に合わせる' },
+      { value: 'wider', label: '商圏より広く', desc: '周りの地域も含める。表示は増えるが、来られない人も増える' },
+      { value: 'national', label: '日本全国', desc: '地域を絞らない' }
+    ];
+    return st.karte.area === 'national' ? all.filter(o => o.value === 'narrower' || o.value === 'match') : all;
+  }
+  const BIDDING_DESC = {
+    manual: '1クリックにいくらまで払うかを自分で決める。計測がなくても使える',
+    clicks: '予算内でクリックが最も多くなるように、Googleが自動で入札する',
+    conversions: '予算内でコンバージョンが最も多くなるように自動で入札する。計測が必要',
+    targetCpa: '目標のCPAに近づくように自動で入札する。計測と、ある程度のデータが必要'
+  };
+
+  const addedIdx = () => kwList().map((c, i) => i).filter(i => st.setup.kw[i].act === 'add');
+  function avgCpc() {
+    const xs = addedIdx().map(i => kwList()[i]).filter(c => !isTermKw(c));
+    return xs.length ? xs.reduce((a, c) => a + c.cpc, 0) / xs.length : null;
+  }
+
+  // 広告見出しとキーワードの関連性（品質）
+  function kwQuality(c, hlIdx = st.setup.headlines) {
+    const hs = hlIdx.map(i => hlList()[i]);
+    let q = hs.some(h => h.quality === 'high' && h.themes.includes(c.theme)) ? 'high'
+      : hs.some(h => h.quality !== 'violation') ? 'mid' : 'low';
+    if (hs.some(h => h.quality === 'violation')) q = q === 'high' ? 'mid' : 'low';
+    return q;
+  }
+
+  // 除外キーワード（候補で「除外」にしたもの＋自分で追加したもの）
+  function groupOfWord(t) {
+    const g = negGroups().find(g => g.words.some(w => t.includes(w) || w.includes(t)));
+    return g ? g.id : null;
+  }
+  function negativesOf() {
+    const list = [];
+    kwList().forEach((c, i) => { if (st.setup.kw[i].act === 'negative') list.push({ text: fill(c.kw), group: c.negGroup || groupOfWord(fill(c.kw)) }); });
+    st.setup.customNeg.forEach(t => list.push({ text: t, group: groupOfWord(t), custom: true }));
+    return list;
+  }
+  const blockedGroups = () => new Set(negativesOf().map(n => n.group).filter(g => g && g !== 'none'));
+  // 除外キーワードが、使うキーワードを打ち消していないか
+  function conflictsOf() {
+    const adds = addedIdx().map(i => fill(kwList()[i].kw));
+    return negativesOf()
+      .map(n => ({ n, hits: adds.filter(a => n.text.split(/\s+/).every(w => a.includes(w))) }))
+      .filter(x => x.hits.length);
+  }
+
+  function setupMissing() {
+    const s = st.setup, out = [];
+    if (st.karte.media === 'meta') {
+      for (const id of Object.keys(C.metaFields)) if (!s.meta[id]) out.push(C.metaFields[id].label.replace(/（.*?）/g, ''));
+      return out;
+    }
+    const und = s.kw.filter(x => !x.act || (x.act === 'add' && !x.match)).length;
+    if (und) out.push(`キーワード${und}個`);
+    else if (!s.kw.some(x => x.act === 'add')) out.push('使うキーワード（1つ以上）');
+    if (!s.headlines.length) out.push('広告見出し');
+    if (!s.area) out.push('配信地域');
+    if (!s.bidding) out.push('入札戦略');
+    if (s.bidding === 'manual' && !(s.bid > 0)) out.push('入札額');
+    return out;
+  }
+
+  function goalStrip() {
+    const k = st.karte;
+    return `<div class="sim-kpis sim-goal-strip">
+      <div><small>目標CV数</small><b>${fmt(k.targetCount)}件</b></div>
+      <div><small>目標CPA</small><b>${yen(k.targetCpa)}</b></div>
+      <div><small>月の予算</small><b>${manYen(k.budget)}</b></div>
+      <div><small>1日の予算</small><b>${yen(k.budget / B.budget.daysPerMonth)}</b></div>
+    </div>`;
+  }
+
+  function setupSubmit() {
+    const miss = setupMissing();
+    return `<div class="sim-submit">
+      <p class="sim-rest" id="sim-rest">${miss.length ? `未設定：<b>${esc(miss.join('・'))}</b>` : 'すべて設定しました'}</p>
+      <button type="button" class="btn-ghost" data-action="sim-to-diagnosis">← 戻る</button>
+      <button type="button" class="btn-primary" data-action="sim-grade" ${miss.length ? 'disabled' : ''}>採点する</button>
+    </div>`;
+  }
+  function updateSetupRest() {
+    const miss = setupMissing();
+    $('#sim-rest').innerHTML = miss.length ? `未設定：<b>${esc(miss.join('・'))}</b>` : 'すべて設定しました';
+    $('[data-action="sim-grade"]').disabled = miss.length > 0;
+  }
+
+  const radioOpts = (attr, id, opts, v) => `<div class="opts">${opts.map(o => `
+    <label class="opt"><input type="radio" name="sim-${attr}-${id}" value="${esc(o.value)}" data-${attr}="${id}" ${v === o.value ? 'checked' : ''}>
+      <span class="opt-main"><span class="opt-label">${esc(o.label)}</span>${o.desc ? `<span class="opt-desc">${esc(o.desc)}</span>` : ''}</span></label>`).join('')}</div>`;
+
+  /* ---------- Google：キーワード選びの画面 ---------- */
+  function renderSetupGoogle() {
+    const k = st.karte, s = st.setup, list = kwList();
+    if (!list.length) {
+      return `<section class="field"><p>この業種（${esc(B.industries[k.industry].label)}）のキーワード候補は準備中です。いまは「歯科・クリニック」「パーソナルジム」「不動産」の3業種で練習できます。カルテで業態を変えるか、媒体をMeta広告にして試してください。</p>
+        <div class="end-actions"><button type="button" class="btn-ghost" data-action="sim-edit">← カルテを修正する</button></div></section>`;
+    }
+    const scale = B.area[k.area].searchScale;
+    const ac = avgCpc();
+    return `
+      <p class="lead">${esc(B.industries[k.industry].label)}の広告で使うキーワードを選びます。候補ごとに「使う（マッチタイプも選ぶ）」「除外」「使わない」を決めてください。検索数は、カルテの商圏（${esc(labelOf('area', k.area))}）での目安です。</p>
+      ${goalStrip()}
+
+      <section class="field">
+        <div class="field-head"><h3>① キーワード</h3></div>
+        <details class="tc-guide sim-guide"><summary>マッチタイプと検索意図の違い</summary><dl>
+          ${Object.entries(B.match).map(([m, x]) => `<dt>${esc(x.label)}　<code>${esc(MATCH_CODE[m]('キーワード'))}</code></dt><dd>表示の広がり ×${x.reach}・関係ない検索 約${Math.round(x.irrelevant * 100)}%（除外なしの場合）・クリック率 ×${x.ctr}</dd>`).join('')}
+          ${Object.entries(B.intent).map(([i, x]) => `<dt>検索意図：${esc(x.label)}</dt><dd>クリック率 ×${x.ctr}・成約率 ×${x.cvr}</dd>`).join('')}
+        </dl></details>
+        <ul class="kw-list">${list.map((c, i) => renderKwRow(c, i, scale)).join('')}</ul>
+
+        <div class="ckw">
+          <h4>除外キーワードを自分で追加 <small>（任意）</small></h4>
+          <div class="ckw-form"><input type="text" id="sim-neg-text" class="sim-text" placeholder="例：バイト" aria-label="除外キーワード"><button type="button" class="btn-ghost" data-action="sim-neg-add">追加</button></div>
+          ${s.customNeg.length ? `<ul class="ckw-list">${s.customNeg.map((t, i) => {
+            const g = negGroups().find(x => x.id === groupOfWord(t));
+            return `<li><code>−${esc(t)}</code><span>${g ? `「${esc(g.label)}」の検索を防げます` : 'どの種類にも当てはまりません（運用しながら確認しましょう）'}</span><button type="button" class="x" data-action="sim-neg-remove" data-i="${i}" aria-label="${esc(t)}を削除">×</button></li>`;
+          }).join('')}</ul>` : ''}
+        </div>
+        ${conflictsOf().map(x => `<p class="sim-alert bad">⚠️ 除外キーワード「${esc(x.n.text)}」が、使うキーワード「${esc(x.hits.join('」「'))}」にも含まれています。このキーワードにも広告が出なくなります。</p>`).join('')}
+      </section>
+
+      <section class="field">
+        <div class="field-head"><h3>② 広告見出し <small class="sim-hint">（最大${C.headlineMax}つ・${s.headlines.length}/${C.headlineMax}）</small></h3></div>
+        <p class="sim-hint">見出しに、使うキーワードの内容が入っているほど「広告の品質」が上がり、クリック率が上がってクリック単価が下がります（品質が高い：クリック率×${B.quality.high.ctr}・クリック単価×${B.quality.high.cpc}／低い：クリック率×${B.quality.low.ctr}・クリック単価×${B.quality.low.cpc}）。</p>
+        <div class="opts multi">${hlList().map((h, i) => `
+          <label class="opt"><input type="checkbox" value="${i}" data-hl="${i}" ${s.headlines.includes(i) ? 'checked' : ''} ${!s.headlines.includes(i) && s.headlines.length >= C.headlineMax ? 'disabled' : ''}>
+            <span class="opt-main"><span class="opt-label">${esc(fill(h.text))}</span></span></label>`).join('')}</div>
+      </section>
+
+      <section class="field">
+        <div class="field-head"><h3>③ 配信地域</h3></div>
+        ${radioOpts('setup', 'area', geoOptions(), s.area)}
+      </section>
+
+      <section class="field">
+        <div class="field-head"><h3>④ 入札戦略</h3></div>
+        <p class="sim-hint">カルテの計測状況：${esc(labelOf('measurement', k.measurement))}／今の月のコンバージョン：${esc(labelOf('monthlyCv', k.monthlyCv))}</p>
+        ${radioOpts('setup', 'bidding', Object.entries(B.bidding).map(([v, x]) => ({ value: v, label: x.label, desc: BIDDING_DESC[v] })), s.bidding)}
+        ${s.bidding === 'manual' ? `<div class="sim-item">
+          <label class="sim-label" for="sim-bid">上限クリック単価（入札額）</label>
+          <div class="num-wrap"><input type="number" inputmode="numeric" id="sim-bid" data-setup="bid" min="1" step="10" value="${s.bid ?? ''}" placeholder="例：300"><span class="unit">円</span></div>
+          <p class="sim-hint sim-echo">${ac ? `使うキーワードの想定クリック単価の平均：約${yen(ac)}` : '使うキーワードを選ぶと、想定クリック単価の平均を表示します'}</p>
+        </div>` : ''}
+      </section>
+      <p class="sim-hint">予算は、カルテの月${manYen(k.budget)}（1日約${yen(k.budget / B.budget.daysPerMonth)}）で配信します。予算の変更は、段階4の運用改善でできます。</p>
+      ${setupSubmit()}`;
+  }
+
+  function renderKwRow(c, i, scale) {
+    const sel = st.setup.kw[i], text = fill(c.kw);
+    const meta = isTermKw(c)
+      ? '<span class="sim-kwm">除外キーワードの候補になる単語</span>'
+      : `<span class="sim-kwm">意図 <b class="sim-int-${c.intent}">${esc(B.intent[c.intent].label)}</b></span><span class="sim-kwm">想定CPC <b>${yen(c.cpc)}</b></span><span class="sim-kwm">検索数 <b>月${fmt(c.volume * scale)}回</b></span>`;
+    return `<li class="kw-row" id="sim-kw-${i}">
+      <div class="kw-top"><span class="kw-text">${esc(text)}</span>
+        <span class="seg" role="group" aria-label="${esc(text)}の扱い">${['add', 'negative', 'skip'].map(a => `<button type="button" class="seg-btn seg-${a} ${sel.act === a ? 'on' : ''}" aria-pressed="${sel.act === a}" data-action="sim-kw" data-i="${i}" data-val="${a}">${ACT_LABEL[a]}</button>`).join('')}</span></div>
+      <div class="sim-kwmeta">${meta}</div>
+      ${sel.act === 'add' ? `<div class="sim-match"><span class="seg" role="group" aria-label="マッチタイプ">${Object.keys(B.match).map(m => `<button type="button" class="seg-btn ${sel.match === m ? 'on seg-add' : ''}" aria-pressed="${sel.match === m}" data-action="sim-match" data-i="${i}" data-val="${m}">${esc(B.match[m].label)}</button>`).join('')}</span>
+        ${sel.match ? `<code class="sim-mcode">${esc(MATCH_CODE[sel.match](text))}</code>` : '<span class="sim-req">マッチタイプを選んでください</span>'}</div>` : ''}
+    </li>`;
+  }
+
+  /* ---------- Meta：オーディエンス設定の画面 ---------- */
+  function audienceOf(m = st.setup.meta) {
+    const k = st.karte;
+    // 特別な広告カテゴリでは地域を狭められないので、「商圏どおり」として計算する
+    const area = !m.metaArea || (m.metaArea === 'narrower' && special()) ? 'match' : m.metaArea;
+    let size = B.area[k.area].population * B.geoFit[area].volume;
+    if (m.ageGender === 'narrow' && !special()) size *= B.meta.ageGenderNarrow;
+    if (m.detailed === 'interest') size *= B.meta.interestNarrow;
+    return Math.round(size);
+  }
+  // 1週間あたりのコンバージョン見込み（広告セット1つあたり）
+  function weeklyPerSet(m = st.setup.meta) {
+    const monthly = st.karte.budget / benchOf(st.karte).cpa;
+    return monthly / (B.budget.daysPerMonth / 7) / Number(m.adsets || 1);
+  }
+
+  function renderAudience() {
+    const m = st.setup.meta, size = audienceOf(), sets = Number(m.adsets || 1);
+    const small = size < B.meta.smallAudience.under;
+    const weekly = weeklyPerSet();
+    return `<h4>👥 推定オーディエンス</h4>
+      <div class="sim-kpis">
+        <div><small>推定オーディエンスサイズ</small><b>約${fmt(size)}人</b><small class="${small ? 'sim-warn' : ''}">${small ? `狭すぎ（${fmt(B.meta.smallAudience.under)}人未満はCPM×${B.meta.smallAudience.cpm}）` : 'ちょうど良い〜広い'}</small></div>
+        <div><small>広告セット1つあたりの予算</small><b>月${manYen(st.karte.budget / sets)}</b></div>
+        <div><small>1セットあたりのCV見込み</small><b>週${weekly < 10 ? weekly.toFixed(1) : fmt(weekly)}件</b><small>${weekly < B.meta.learning.weeklyConversions ? '学習は完了しにくい' : '学習を完了できそう'}</small></div>
+      </div>
+      ${special() ? `<p class="sim-hint">特別な広告カテゴリ（${esc(labelOf('specialCategory', st.karte.specialCategory))}）を申告しているため、年齢・性別では絞れず、地域も半径約24km未満には絞れません。</p>` : ''}`;
+  }
+
+  function renderSetupMeta() {
+    const k = st.karte;
+    return `
+      <p class="lead">Meta広告で「誰に・どう届けるか」を設定します。設定を変えると、推定オーディエンスサイズと学習の見込みが変わります。</p>
+      ${goalStrip()}
+      <div class="sim-calc" id="sim-audience" aria-live="polite">${renderAudience()}</div>
+      ${C.metaGroups.map(g => `
+        <section class="field sim-group">
+          <div class="field-head"><h3>${esc(g.title)}</h3></div>
+          ${g.fields.map(id => `<fieldset class="sim-item"><legend class="sim-label">${esc(C.metaFields[id].label)}</legend>${radioOpts('meta', id, C.metaFields[id].options, st.setup.meta[id])}</fieldset>`).join('')}
+        </section>`).join('')}
+      <p class="sim-hint">予算は、カルテの月${manYen(k.budget)}で配信します。素材は「${esc(labelOf('creative', k.creative))}」として計算します。</p>
+      ${setupSubmit()}`;
+  }
+
+  /* ---------- 採点：Google ---------- */
+  function gradeKwItem(c, sel) {
+    const v = sel.act === 'add' ? sel.match : sel.act;
+    const level = c.ans === 'add'
+      ? (sel.act === 'add' && c.best.includes(sel.match) ? 'good' : (c.ok || []).includes(v) ? 'ok' : 'bad')
+      : (sel.act === c.ans ? 'good' : (c.ok || []).includes(v) ? 'ok' : 'bad');
+    return {
+      level,
+      choice: sel.act === 'add' ? `使う（${B.match[sel.match].label}）` : ACT_LABEL[sel.act],
+      best: c.ans === 'add' ? `使う（${c.best.map(m => B.match[m].label).join('・')}）` : ACT_LABEL[c.ans]
+    };
+  }
+
+  function gradeArea() {
+    const key = geoKey(st.setup.area), g = B.geoFit[key];
+    const t = {
+      match: ['good', '商圏どおりに配信すると、来られる人にだけ広告費を使えます。'],
+      narrower: ['ok', `商圏より狭くすると、来やすい人に絞れるので成約率は上がります（×${g.cvr}）。ただし表示回数が減り（×${g.volume}）、クリック単価も上がります（×${g.cpc}）。予算が少ないときの選択肢です。`],
+      wider: ['ok', `商圏より広くすると表示は増えます（×${g.volume}）が、増えた分は来られない人が多く、その成約率はかなり低くなります（×${g.extraCvr}）。`],
+      nationalForLocal: ['bad', `来店型の業種で全国に配信すると、表示の大半が来られない地域の人になります（増えた分の成約率×${g.extraCvr}）。広告費の無駄になるので、商圏に合わせましょう。`]
+    }[key];
+    return { title: '配信地域', level: t[0], choice: (geoOptions().find(o => o.value === st.setup.area) || {}).label, best: geoOptions().find(o => o.value === 'match').label, reason: t[1] };
+  }
+
+  function gradeBidding() {
+    const k = st.karte, b = st.setup.bidding;
+    const cv = numOf('monthlyCv', k.monthlyCv) || 0;
+    const need = B.autoBidLearning.monthlyConversions;
+    let level, reason, best;
+    if (k.measurement === 'none') {
+      best = '手動入札 または クリック数の最大化';
+      if (b === 'manual' || b === 'clicks') { level = 'good'; reason = '計測ができていないので、成果をもとにした自動入札は使えません。クリックを基準にした入札で始めつつ、早めに計測を設定しましょう。'; }
+      else { level = 'bad'; reason = `「${B.bidding[b].label}」はコンバージョンのデータをもとに入札します。計測していないとGoogleが何を目指せばいいか分からず、配信が不安定になり、クリック単価も上がりがちです（×${B.noMeasurement.autoBidCpc}）。`; }
+    } else if (k.measurement === 'partial') {
+      best = 'コンバージョン数の最大化（計測をそろえてから）';
+      if (b === 'targetCpa') { level = 'bad'; reason = '一部しか計測できていない状態で目標CPAを設定すると、実際より成果が少なく見えるため、入札が弱くなりすぎます。'; }
+      else { level = 'ok'; reason = '計測が一部だけなので、どの入札戦略でも成果の判断がずれやすい状態です。まずは計測をそろえることが一番の改善策です。'; }
+    } else if (cv >= need) {
+      best = '目標コンバージョン単価 または コンバージョン数の最大化';
+      if (b === 'targetCpa' || b === 'conversions') { level = 'good'; reason = `計測ができていて、月${need}件以上のコンバージョンがあるので、自動入札が安定して働きます。`; }
+      else { level = 'ok'; reason = '計測もデータも十分あるのに、クリックを基準にした入札ではもったいない状態です。成約しやすい人に絞って入札できる自動入札を使いましょう。'; }
+    } else {
+      best = 'コンバージョン数の最大化';
+      if (b === 'conversions') { level = 'good'; reason = `計測はできているので、まずは「コンバージョン数の最大化」でデータをためるのが定番です。月${need}件ほどたまったら目標CPAを検討しましょう。`; }
+      else if (b === 'targetCpa') { level = 'ok'; reason = `月のコンバージョンが${need}件未満なので、目標CPAは学習が安定せず、成果が大きくぶれやすくなります（ブレ±${Math.round(B.autoBidLearning.lowDataSwing * 100)}%）。`; }
+      else { level = 'ok'; reason = '計測ができているので、コンバージョンを基準にした自動入札を使った方が、成約しやすい人に広告を出せます。'; }
+    }
+    if (b === 'manual' && st.setup.bid > 0) {
+      const ac = avgCpc();
+      if (ac && st.setup.bid < ac * 0.6) { reason += `\n入札額${yen(st.setup.bid)}は、想定クリック単価の平均（約${yen(ac)}）よりかなり低く、広告がほとんど表示されないおそれがあります。`; if (level === 'good') level = 'ok'; }
+      else if (ac && st.setup.bid > ac * 2) { reason += `\n入札額${yen(st.setup.bid)}は想定クリック単価の平均（約${yen(ac)}）の2倍以上です。予算を早く使い切ってしまうおそれがあります。`; if (level === 'good') level = 'ok'; }
+    }
+    const choice = B.bidding[b].label + (b === 'manual' && st.setup.bid ? `（${yen(st.setup.bid)}）` : '');
+    return { title: '入札戦略', level, choice, best, reason };
+  }
+
+  function gradeHeadlines() {
+    const hs = st.setup.headlines.map(i => hlList()[i]);
+    const themes = [...new Set(addedIdx().map(i => kwList()[i].theme).filter(Boolean))];
+    const covered = themes.filter(t => hs.some(h => h.quality === 'high' && h.themes.includes(t)));
+    const miss = themes.filter(t => !covered.includes(t));
+    const vio = hs.filter(h => h.quality === 'violation');
+    const level = vio.length ? 'bad' : !themes.length ? 'ok'
+      : covered.length === themes.length ? 'good' : covered.length >= themes.length / 2 ? 'ok' : 'bad';
+    const lines = hs.map(h => `・${fill(h.text)}：${h.reason}`);
+    if (miss.length) lines.push(`使うキーワードのうち「${miss.map(t => C.themeLabels[t] || t).join('」「')}」に合う見出しがありません。そのキーワードは品質が下がり、クリック単価が上がります。`);
+    if (vio.length) lines.push('問題のある表現を含む見出しがあるため、すべてのキーワードで品質が1段階下がる計算にしています。');
+    const bestHs = hlList().filter(h => h.quality === 'high' && h.themes.some(t => themes.includes(t)));
+    return { title: '広告見出し', level, choice: hs.map(h => fill(h.text)).join('／'), best: bestHs.map(h => fill(h.text)).join('／') || '使うキーワードに合う見出し', reason: lines.join('\n') };
+  }
+
+  /* ---------- 採点：Meta ---------- */
+  function gradeMeta() {
+    const k = st.karte, m = st.setup.meta, items = [];
+    const size = audienceOf(), small = size < B.meta.smallAudience.under;
+    const targeted = k.targetAge !== 'all' || k.targetGender !== 'both';
+    const lab = (id, v) => (C.metaFields[id].options.find(o => o.value === v) || {}).label;
+    const add = (id, level, best, reason) => items.push({ title: C.metaFields[id].label.replace(/（.*?）/g, ''), level, choice: lab(id, m[id]), best, reason, w: 2 });
+
+    // 地域
+    if (m.metaArea === 'match') add('metaArea', 'good', '商圏どおり', '商圏どおりに配信すると、来られる人にだけ広告費を使えます。');
+    else if (m.metaArea === 'narrower') add('metaArea', special() ? 'bad' : 'ok', '商圏どおり', special()
+      ? '特別な広告カテゴリを申告した広告は、地域を半径約24km未満に絞れません。この設定は使えません。'
+      : `狭くすると来やすい人に絞れますが、人数が減ってCPMが上がりやすくなります（人数が${fmt(B.meta.smallAudience.under)}人未満でCPM×${B.meta.smallAudience.cpm}）。`);
+    else add('metaArea', 'ok', '商圏どおり', '広くすると人数は増えますが、来られない人にも広告が表示されるため、成約率が下がります。');
+
+    // 年齢・性別
+    if (special()) {
+      add('ageGender', m.ageGender === 'open' ? 'good' : 'bad', '絞らない', m.ageGender === 'open'
+        ? '特別な広告カテゴリでは年齢・性別で絞れないので、正しい設定です。誰向けの物件かは、広告文や画像で伝えましょう。'
+        : '特別な広告カテゴリ（住宅・雇用・金融など）を申告した広告は、差別を防ぐため年齢・性別で絞れません。この設定は使えません。');
+    } else if (m.ageGender === 'open') {
+      add('ageGender', 'good', '絞らない（ターゲットがはっきりしていれば、絞るのも可）', '最近のMeta広告は、絞らなくても反応しそうな人を自動で見つけてくれます。人数が多いほど配信が安定し、CPMも下がりやすくなります。');
+    } else {
+      add('ageGender', targeted && !small ? 'good' : 'ok', '絞らない', targeted
+        ? (small ? 'ターゲットに合わせて絞るのは自然ですが、ほかの絞り込みと重なって人数が少なくなりすぎています。' : 'カルテのターゲットがはっきりしているので、年齢・性別で絞るのは自然な判断です。人数（オーディエンスサイズ）が少なくなりすぎないかは見ておきましょう。')
+        : 'カルテのターゲットは「年齢・性別を問わない」なので、絞る必要はありません。人数が減るぶん、CPMが上がりやすくなります。');
+    }
+
+    // 詳細ターゲット
+    if (m.detailed === 'advantage') add('detailed', 'good', 'Advantage+ オーディエンス', '少ない予算でも配信が広がりやすく、学習も進みやすい設定です。どんな人に届けたいかは、広告文と画像で伝えましょう。');
+    else add('detailed', small ? 'bad' : 'ok', 'Advantage+ オーディエンス', small
+      ? `興味・関心での絞り込みが重なり、人数が約${fmt(size)}人まで減っています。配信が伸びず、CPMも上がります（×${B.meta.smallAudience.cpm}）。`
+      : '興味・関心で絞るのは間違いではありませんが、人数が減って配信が伸びにくくなります。最近は、Advantage+ オーディエンスの方が成果が出やすいことが多いです。');
+
+    // パフォーマンスの目標
+    const o = m.optimization;
+    if (k.measurement === 'none') {
+      const t = {
+        clicks: ['good', '計測（ピクセル）がないので、今できる中では「リンクのクリック数」が現実的です。ただしクリックしやすい人に配信されるだけで、問い合わせにつながる保証はありません。早めにピクセルを設定しましょう。'],
+        lpviews: ['bad', '「ランディングページビュー」を数えるにもピクセルが必要です。計測していない状態では選べません。'],
+        conversions: ['bad', `ピクセルで成果を計測していないと、Metaは誰が成果を出したか分からず、「コンバージョン数の最大化」は働きません（成約率×${B.noMeasurement.metaCvr}で計算します）。`],
+        reach: ['bad', '「リーチ」はできるだけ多くの人に見せる、認知のための設定です。問い合わせを増やしたい今回の目的とは合いません。']
+      }[o];
+      add('optimization', t[0], 'リンクのクリック数（＋ピクセルの設定）', t[1]);
+    } else {
+      const weekly = weeklyPerSet();
+      const t = {
+        conversions: ['good', `成果（${labelOf('goal', k.goal)}）が出やすい人に配信される、目的に合った設定です。${weekly < B.meta.learning.weeklyConversions ? B.meta.learning.note : ''}`],
+        lpviews: ['ok', `LPを見てくれる人に配信されるので、成果の手前の行動を増やせます。コンバージョンが週${B.meta.learning.weeklyConversions}件に遠く届かないときの「学習を進めるための工夫」としては使えますが、計測ができているなら、まずはコンバージョンを目標にするのが基本です。`],
+        clicks: ['ok', 'クリックしやすい人に配信されるため、クリック数は増えても、問い合わせにつながりにくくなりがちです。計測ができているなら、コンバージョンを目標にしましょう。'],
+        reach: ['bad', '「リーチ」はできるだけ多くの人に見せる、認知のための設定です。問い合わせを増やしたい今回の目的とは合いません。']
+      }[o];
+      add('optimization', t[0], 'コンバージョン数の最大化', t[1]);
+    }
+
+    // 配置
+    if (m.placement === 'auto') add('placement', 'good', 'Advantage+ 配置（自動）', '配信先をMetaが自動で選ぶので、同じ予算でも安く多くの人に届けやすくなります。');
+    else if (m.placement === 'instagram') add('placement', 'ok', 'Advantage+ 配置（自動）', k.targetAge === 'young' ? '20代中心ならInstagram中心も自然な考え方です。ただ、自動にした方がCPMが下がりやすく、配信も安定しやすいです。' : '配置を絞ると、配信先が減ってCPMが上がりやすくなります。まずは自動にして、成果を見てから判断しましょう。');
+    else add('placement', k.targetAge === 'young' ? 'bad' : 'ok', 'Advantage+ 配置（自動）', k.targetAge === 'young' ? '20代中心のターゲットなのに、Facebookだけに絞ると届けたい人の多くを逃します。' : '配置を絞ると、配信先が減ってCPMが上がりやすくなります。まずは自動にして、成果を見てから判断しましょう。');
+
+    // 広告セットの数
+    const total = weeklyPerSet(Object.assign({}, m, { adsets: '1' }));
+    const per = weeklyPerSet();
+    if (m.adsets === '1') add('adsets', 'good', '1つにまとめる', `予算とデータが1か所に集まるので、学習が進みやすくなります（見込み：週${total.toFixed(1)}件）。${total < B.meta.learning.weeklyConversions ? 'それでも学習の完了（週' + B.meta.learning.weeklyConversions + '件）には届きませんが、小規模の予算ではよくあることです。' : ''}`);
+    else add('adsets', total >= B.meta.learning.weeklyConversions * 3 ? 'good' : m.adsets === '3' ? 'ok' : 'bad', '1つにまとめる', `${m.adsets}つに分けると、1つあたりの予算が月${manYen(k.budget / Number(m.adsets))}、コンバージョン見込みが週${per.toFixed(1)}件になり、どの広告セットも学習が進みにくくなります。予算が少ないうちは、まとめた方が成果が安定します。`);
+
+    return { items };
+  }
+
+  /* ---------- 採点の画面 ---------- */
+  function renderSetupResult() {
+    const isMeta = st.karte.media === 'meta';
+    let items, kwRows = [];
+    if (isMeta) {
+      items = gradeMeta().items;
+    } else {
+      kwRows = kwList().map((c, i) => Object.assign({ c, i }, gradeKwItem(c, st.setup.kw[i])));
+      items = [gradeHeadlines(), gradeArea(), gradeBidding()].map(x => Object.assign({ w: 2 }, x));
+    }
+    const all = [...kwRows.map(r => ({ level: r.level, w: 1 })), ...items];
+    const max = all.reduce((a, x) => a + 2 * x.w, 0);
+    const score = Math.round(all.reduce((a, x) => a + PTS[x.level] * x.w, 0) / max * 100);
+    const count = lv => all.filter(x => x.level === lv).length;
+    const comment = score >= 85 ? 'すばらしい設定です！このまま成果のシミュレーションに進みましょう。'
+      : score >= 60 ? 'おおむね良い設定です。△・×の項目の解説を読んで、直してから進むとより良い成果が出ます。'
+      : '見直したい項目がいくつかあります。解説を読んで「設定を直す」から修正してみましょう。';
+
+    const itemHtml = x => `
+      <article class="res-item ${x.level}">
+        <div class="res-head"><span class="mark ${x.level}">${MARK_TEXT[x.level]}</span><h3>${esc(x.title)}</h3></div>
+        <dl class="res-rows"><dt>あなたの設定</dt><dd>${esc(x.choice)}</dd><dt>おすすめ</dt><dd>${esc(x.best)}</dd></dl>
+        <p class="reason">${esc(x.reason).replace(/\n/g, '<br>')}</p>
+      </article>`;
+
+    let google = '';
+    if (!isMeta) {
+      const added = addedIdx().map(i => kwList()[i]).filter(c => !isTermKw(c));
+      const blocked = blockedGroups();
+      google = `
+        <section class="field">
+          <div class="field-head"><h3>① キーワード</h3><span class="tag">${kwRows.filter(r => r.level === 'good').length} / ${kwRows.length} 正解</span></div>
+          <ul class="sim-kwres">${kwRows.map(r => `
+            <li class="${r.level}">
+              <div class="sim-kwres-head"><b>${esc(fill(r.c.kw))}</b><span class="mark ${r.level}">${MARK_TEXT[r.level]}</span></div>
+              <p class="sim-kwres-pick">あなた：${esc(r.choice)}<span>おすすめ：${esc(r.best)}</span></p>
+              <p class="sim-kwres-why">${esc(r.c.reason)}</p>
+            </li>`).join('')}</ul>
+        </section>
+
+        <section class="field">
+          <div class="field-head"><h3>📊 使うキーワードの品質</h3></div>
+          <p class="sim-hint">選んだ広告見出しとの関連性から決まります。品質が高いほどクリック率が上がり、クリック単価が下がります。成果のシミュレーションでもこの品質を使います。</p>
+          ${added.length ? `<div class="sim-table-wrap"><table class="kw-table">
+            <thead><tr><th>キーワード</th><th>マッチタイプ</th><th>想定CPC</th><th>品質</th><th>品質を反映したCPC</th></tr></thead>
+            <tbody>${added.map(c => {
+              const i = kwList().indexOf(c), q = kwQuality(c);
+              return `<tr><td>${esc(fill(c.kw))}</td><td>${esc(B.match[st.setup.kw[i].match].label)}</td><td>${yen(c.cpc)}</td>
+                <td class="m ${q === 'high' ? 'good' : q === 'mid' ? 'ok' : 'bad'}">${QUALITY_LABEL[q]}</td><td>約${yen(c.cpc * B.quality[q].cpc)}</td></tr>`;
+            }).join('')}</tbody></table></div>` : '<p class="sim-hint">使うキーワードがありません。</p>'}
+        </section>
+
+        <section class="field">
+          <div class="field-head"><h3>🚫 除外キーワードで防げる「関係ない検索」</h3></div>
+          <ul class="sim-neglist">${negGroups().map(g => `<li class="${blocked.has(g.id) ? 'on' : ''}"><span>${blocked.has(g.id) ? '✓' : '—'}</span>${esc(g.label)}<small>関係ない検索の約${Math.round(g.share * 100)}%</small></li>`).join('')}</ul>
+          <p class="sim-hint">「その他」は事前に予想しにくい検索です。段階4の検索語句レポートで見つけて除外していきます。部分一致のキーワードが多いほど、関係ない検索の量そのものが増えます。</p>
+          ${conflictsOf().map(x => `<p class="sim-alert bad">⚠️ 除外キーワード「${esc(x.n.text)}」が、使うキーワード「${esc(x.hits.join('」「'))}」を打ち消しています。</p>`).join('')}
+        </section>`;
+    } else {
+      google = `<div class="sim-calc">${renderAudience()}</div>`;
+    }
+
+    return `
+      <div class="score-card">
+        <div class="ring" style="--p:${score}"><span>${score}<small>点</small></span></div>
+        <div class="score-info"><p class="res-pf">${esc(B.industries[st.karte.industry].label)}｜${isMeta ? 'Meta広告' : 'Google検索広告'}</p>
+          <h2>${isMeta ? 'オーディエンス設定' : 'キーワード選び'}の結果</h2>
+          <p class="comment">${comment}</p>
+          <div class="counts"><span class="count good">◎ ${count('good')}</span><span class="count ok">△ ${count('ok')}</span><span class="count bad">× ${count('bad')}</span></div>
+        </div>
+      </div>
+      ${google}
+      ${items.map(itemHtml).join('')}
+      <div class="end-actions">
+        <button type="button" class="btn-ghost" data-action="sim-back-setup">← 設定を直す</button>
+        <button type="button" class="btn-primary" disabled title="次の段階で追加予定です">次へ：成果シミュレーション（準備中）</button>
+      </div>`;
+  }
+
+  function renderKeep() {
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+  }
+  function addNegative() {
+    const input = $('#sim-neg-text');
+    const t = input.value.trim().replace(/^[-−]+/, '');
+    if (!t) return;
+    if (!st.setup.customNeg.includes(t)) st.setup.customNeg.push(t);
+    renderKeep();
+    $('#sim-neg-text').focus();
+  }
+
   /* ---------- events ---------- */
   function startSim() {
     st.phase = 'karte';
     st.karte = blankKarte();
     st.sampleId = null;
+    st.setup = null;
     st.dirty = false;
     render();
     showSim();
   }
+
+  view.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.id === 'sim-neg-text' && !e.isComposing) {
+      e.preventDefault();
+      addNegative();
+    }
+  });
 
   // ホームに戻るときは、入力途中なら確認する（他のモードの処理より先に動かす）
   document.addEventListener('click', e => {
@@ -544,6 +1040,44 @@
         break;
       }
       case 'sim-help': openHelp(t.dataset.id); break;
+      case 'sim-to-setup':
+        if (setupStale()) initSetup();
+        st.phase = 'setup';
+        render();
+        window.scrollTo(0, 0);
+        break;
+      case 'sim-to-diagnosis':
+        st.phase = 'diagnosis';
+        render();
+        window.scrollTo(0, 0);
+        break;
+      case 'sim-kw': {
+        const sel = st.setup.kw[Number(t.dataset.i)];
+        sel.act = t.dataset.val;
+        if (sel.act !== 'add') sel.match = null;
+        renderKeep();
+        break;
+      }
+      case 'sim-match':
+        st.setup.kw[Number(t.dataset.i)].match = t.dataset.val;
+        renderKeep();
+        break;
+      case 'sim-neg-add': addNegative(); break;
+      case 'sim-neg-remove':
+        st.setup.customNeg.splice(Number(t.dataset.i), 1);
+        renderKeep();
+        break;
+      case 'sim-grade':
+        if (setupMissing().length) return;
+        st.phase = 'setupResult';
+        render();
+        window.scrollTo(0, 0);
+        break;
+      case 'sim-back-setup':
+        st.phase = 'setup';
+        render();
+        window.scrollTo(0, 0);
+        break;
       case 'sim-diagnose':
         syncGoals();
         if (missing().length || !st.karte.targetCount || !st.karte.targetCpa) return;
@@ -562,7 +1096,27 @@
   const refreshReq = id => { const r = $(`#sim-req-${id}`); if (r) r.hidden = filled(id); };
 
   view.addEventListener('change', e => {
-    const id = e.target.dataset.sim;
+    const d = e.target.dataset;
+    if (d.hl != null) {
+      const i = Number(d.hl), hs = st.setup.headlines;
+      if (e.target.checked) { if (hs.length < C.headlineMax && !hs.includes(i)) hs.push(i); }
+      else st.setup.headlines = hs.filter(x => x !== i);
+      st.setup.headlines.sort((a, b) => a - b);
+      renderKeep();
+      return;
+    }
+    if (d.setup === 'area' || d.setup === 'bidding') {
+      st.setup[d.setup] = e.target.value;
+      if (d.setup === 'bidding') renderKeep(); else updateSetupRest();
+      return;
+    }
+    if (d.meta) {
+      st.setup.meta[d.meta] = e.target.value;
+      $('#sim-audience').innerHTML = renderAudience();
+      updateSetupRest();
+      return;
+    }
+    const id = d.sim;
     if (!id || fieldOf(id).type !== 'single') return;
     st.karte[id] = e.target.value;
     st.dirty = true;
@@ -579,6 +1133,11 @@
   });
 
   view.addEventListener('input', e => {
+    if (e.target.dataset.setup === 'bid') {
+      st.setup.bid = e.target.value === '' ? null : Number(e.target.value);
+      updateSetupRest();
+      return;
+    }
     const id = e.target.dataset.sim;
     if (!id) return;
     const f = fieldOf(id);

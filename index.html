@@ -743,6 +743,31 @@
   .sim-alert { margin: 12px 0 0; padding: 10px 14px; border-radius: var(--radius); font-size: 14px; }
   .sim-alert.bad { background: var(--bad-soft); color: var(--bad); }
   .sim-alert.ok { background: var(--ok-soft); color: var(--ok); }
+  .sim-goal-strip { margin: 16px 0 4px; }
+  .sim-guide { margin: 8px 0 12px; }
+  .sim-guide code { font-size: 12px; background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+  .sim-kwmeta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .sim-kwm b { color: var(--text); font-weight: 500; }
+  .sim-kwm b.sim-int-high { color: var(--good); } .sim-kwm b.sim-int-low { color: var(--bad); }
+  .sim-match { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+  .sim-mcode { font-size: 13px; font-weight: 700; background: var(--good-soft); color: var(--good); border-radius: 4px; padding: 1px 8px; }
+  .field-head h3 small.sim-hint { font-weight: 400; margin: 0; }
+  .sim-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .sim-table-wrap .kw-table { min-width: 420px; }
+  .sim-kwres { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+  .sim-kwres li { border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius); padding: 10px 12px; }
+  .sim-kwres li.good { border-left-color: var(--good); } .sim-kwres li.ok { border-left-color: var(--ok); } .sim-kwres li.bad { border-left-color: var(--bad); }
+  .sim-kwres-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .sim-kwres-head b { font-size: 14px; font-weight: 500; }
+  .sim-kwres-pick { margin: 6px 0 0; font-size: 13px; display: flex; flex-wrap: wrap; gap: 2px 16px; }
+  .sim-kwres-pick span { color: var(--muted); }
+  .sim-kwres-why { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+  .sim-match .seg-btn { min-width: 0; padding: 6px 10px; white-space: nowrap; }
+  .sim-neglist { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+  .sim-neglist li { display: flex; align-items: center; gap: 10px; font-size: 14px; background: var(--surface-2); border-radius: var(--radius); padding: 8px 12px; color: var(--muted); }
+  .sim-neglist li span { width: 20px; text-align: center; font-weight: 700; }
+  .sim-neglist li small { margin-left: auto; font-size: 12px; }
+  .sim-neglist li.on { background: var(--good-soft); color: var(--good); }
   @media (max-width: 560px) {
     .sim-karte { grid-template-columns: 1fr; gap: 0; }
     .sim-karte dd { margin-bottom: 8px; }
