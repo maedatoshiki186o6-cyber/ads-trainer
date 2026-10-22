@@ -81,6 +81,11 @@
     seed: 0,
     ops: null,        // 段階4：月ごとの結果・改善の記録          // 成果シミュレーションのランダムなブレの元（「もう一度」で変わる）
     karteOpen: false, // 画面右下の「カルテ」パネルを開いているか
+    kwSource: null,   // キーワード候補の作り方（'sample' / 'template' / 'ai'。null は業種に合わせて自動）
+    ai: null,         // 取り込んだAIの候補 { items, at, industry, areaName }
+    aiMsg: null,      // 取り込みの結果（エラー・注意）
+    aiDraft: '',      // 貼り付け欄の入力中の文章
+    saved: null,      // ブラウザに保存されている前回の案件（カルテ画面で読み込める）
     dirty: false
   };
 
@@ -307,6 +312,7 @@
     const rest = missing().length;
     return `
       <p class="lead">広告を始める前に、案件（広告を出すお店や商品）の情報を整理します。サンプル案件を選ぶか、自分で項目を選んでください。この内容をもとに、あとの段階で設定と成果を計算します。</p>
+      ${renderSavedCase()}
 
       <h2 class="sec-title">サンプル案件から選ぶ</h2>
       <div class="scenario-grid">
@@ -337,8 +343,20 @@
 
       <div class="sim-submit">
         <p class="sim-rest" id="sim-rest">${rest ? `未選択の項目があと <b>${rest}</b> 個あります` : 'すべての項目を選びました'}</p>
+        ${aiCopyBtn('btn-ghost', 'sim-ai-copy')}
         <button type="button" class="btn-primary" data-action="sim-diagnose" id="sim-diagnose" ${rest ? 'disabled' : ''}>カルテを確定して診断する</button>
       </div>`;
+  }
+
+  function renderSavedCase() {
+    const d = st.saved;
+    if (!d) return '';
+    const k = d.karte, ind = B.industries[k.industry], media = C.media.find(m => m.value === k.media) || {};
+    const area = (k.areaName || '').trim();
+    return `<section class="field sim-saved">
+      <p>💾 前回の案件がブラウザに保存されています：<b>${esc(ind.icon)} ${esc(ind.label)}｜${esc(media.label || '')}${area ? `（${esc(area)}）` : ''}</b>${d.ai ? `・AIの候補 ${d.ai.items.length}個` : ''}<small>${esc(new Date(d.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }))} 保存</small></p>
+      <div class="end-actions"><button type="button" class="btn-ghost sm" data-action="sim-clear-saved">保存を削除</button><button type="button" class="btn-primary sm" data-action="sim-load-saved">この案件を読み込む</button></div>
+    </section>`;
   }
 
   const helpBtn = id => fieldOf(id).help ? `<button type="button" class="i-btn" data-action="sim-help" data-id="${id}" aria-label="${esc(fieldOf(id).label)}の解説">i</button>` : '';
@@ -498,6 +516,7 @@
 
       <div class="end-actions">
         <button type="button" class="btn-ghost" data-action="sim-edit">← カルテを修正する</button>
+        ${aiCopyBtn('btn-ghost')}
         <button type="button" class="btn-primary" data-action="sim-to-setup">次へ：${esc(phaseTitle(PHASES[1]))} →</button>
       </div>`;
   }
@@ -506,16 +525,22 @@
     const rest = missing().length;
     $('#sim-rest').innerHTML = rest ? `未選択の項目があと <b>${rest}</b> 個あります` : 'すべての項目を選びました';
     $('#sim-diagnose').disabled = rest > 0;
+    const ai = $('#sim-ai-copy');
+    if (ai) ai.disabled = !aiReady();
   }
 
   /* =========================================================
      段階2：キーワード選び（Google）／オーディエンス設定（Meta）
      ========================================================= */
   const areaWord = () => (st.karte.areaName || '').trim() || '〇〇';
-  const fill = t => String(t).replace(/\{area\}/g, areaWord());
-  const kwList = () => C.keywords[st.karte.industry] || [];
-  const negGroups = () => C.negativeGroups[st.karte.industry] || [];
-  const hlList = () => C.headlines[st.karte.industry] || [];
+  const tplWords = () => C.kwTemplates.words[st.karte.industry] || { main: B.industries[st.karte.industry].label, act: '申し込み', sub: '' };
+  const fillWords = t => { const w = tplWords(); return String(t).replace(/\{main\}/g, w.main).replace(/\{act\}/g, w.act).replace(/\{sub\}/g, w.sub); };
+  const fill = t => fillWords(t).replace(/\{area\}/g, areaWord());
+  // キーワード候補は、設定を始めたときの作り方で決まり、st.setup.cands に入る（サンプル・型・AI）
+  const kwList = () => (st.setup && st.setup.cands) || [];
+  const negGroups = () => C.negativeGroups[st.karte.industry] || C.commonNegativeGroups;
+  const hlList = () => C.headlines[st.karte.industry] || C.commonHeadlines;
+  const searchTermsOf = () => C.searchTerms[st.karte.industry] || C.commonSearchTerms;
   const isTermKw = c => !c.volume; // 除外キーワード向けの単語（検索数を持たない候補）
   const MATCH_CODE = { exact: t => `[${t}]`, phrase: t => `"${t}"`, broad: t => t };
   const ACT_LABEL = { add: '使う', negative: '除外', skip: '使わない' };
@@ -524,15 +549,259 @@
   const QUALITY_LABEL = { high: '高い', mid: 'ふつう', low: '低い' };
   const special = () => !!st.karte.specialCategory && st.karte.specialCategory !== 'none';
 
-  function initSetup() {
+  function initSetup(source = st.kwSource) {
+    if (!source || (source === 'sample' && !hasSample())) source = defaultSource();
+    const cands = candidatesOf(source);
+    st.kwSource = source;
     st.setup = {
-      industry: st.karte.industry, media: st.karte.media,
-      kw: kwList().map(() => ({ act: null, match: null })),
+      industry: st.karte.industry, media: st.karte.media, source, cands, aiAt: source === 'ai' && st.ai ? st.ai.at : null,
+      kw: cands.map(() => ({ act: null, match: null })),
       customNeg: [], headlines: [], area: null, bidding: null, bid: null,
       meta: {}
     };
   }
-  const setupStale = () => !st.setup || st.setup.industry !== st.karte.industry || st.setup.media !== st.karte.media;
+  const setupStale = () => !st.setup || st.setup.industry !== st.karte.industry || st.setup.media !== st.karte.media
+    || (st.setup.source === 'ai' && st.setup.aiAt !== (st.ai && st.ai.at));
+
+  /* ---------- キーワード候補の作り方（サンプル／型から自動生成／AIの回答を取り込む） ---------- */
+  const KW_SOURCES = [
+    { value: 'sample',   label: '📘 サンプルの手作り候補', desc: '解説つきで用意した候補。歯科・クリニック／パーソナルジム／不動産の3業種で使えます' },
+    { value: 'template', label: '🧩 型から自動生成',       desc: '「地域名＋業種」「〇〇 料金」「〇〇 求人」などの型から作ります。すべての業種で使えます' },
+    { value: 'ai',       label: '🤖 AIの回答を取り込む',   desc: '案件カルテをAI（ChatGPT・Claude・Geminiなど）に渡して作った候補を貼り付けます' }
+  ];
+  const hasSample = () => !!(C.keywords[st.karte.industry] || []).length;
+  const defaultSource = () => hasSample() ? 'sample' : 'template';
+  const AI_INTENT = { high: '強', mid: '中', low: '弱', neg: '除外' };
+
+  function candidatesOf(source) {
+    if (source === 'sample') return C.keywords[st.karte.industry] || [];
+    if (source === 'ai') return st.ai ? st.ai.items.map(aiCandidate) : [];
+    const local = B.industries[st.karte.industry].local, cpc = B.industries[st.karte.industry].search.cpc;
+    return C.kwTemplates.patterns.filter(p => p.local == null || p.local === local).map(({ local: _, ...p }) => Object.assign(p, {
+      kw: fillWords(p.kw).replace(/\s+/g, ' ').trim(),
+      cpc: Math.round(cpc * p.cpc / 10) * 10, theme: p.volume ? 'general' : ''
+    }));
+  }
+  // AIが付けた検索意図の強さを正解として採点する
+  const AI_ANSWER = {
+    high: { ans: 'add', best: ['phrase', 'exact'], ok: ['broad'] },
+    mid:  { ans: 'add', best: ['phrase'], ok: ['exact', 'skip'] },
+    low:  { ans: 'skip', best: [], ok: ['negative', 'phrase'] },
+    neg:  { ans: 'negative', best: [], ok: ['skip'] }
+  };
+  function aiCandidate(x) {
+    const neg = x.intent === 'neg', scale = B.area[st.karte.area].searchScale;
+    return Object.assign({
+      kw: x.kw, intent: neg ? 'low' : x.intent, ai: true,
+      cpc: neg ? 0 : x.cpc,
+      // AIの検索数は「カルテの商圏で」の数なので、市区町村の規模に直して持つ（表示では商圏の倍率を掛け直す）
+      volume: neg ? 0 : Math.max(1, x.volume) / scale,
+      theme: neg ? '' : 'general',
+      reason: `${x.reason || '（AIの理由なし）'}（AIの判定：${AI_INTENT[x.intent]}）`
+    }, AI_ANSWER[x.intent]);
+  }
+
+  /* ---------- AIの回答の読み込み ----------
+   * 前後に文章やコードブロック（```）があっても、JSONの部分を探して読み込む。
+   * 項目名は日本語・英語のどちらでもよい。数値は「300円」「1,200回」「100〜200」「1.2万」なども読む。
+   */
+  const AI_KEYS = {
+    kw:     ['キーワード', 'keyword', 'kw', '語句', 'word', 'query'],
+    intent: ['検索意図の強さ', '検索意図', '意図の強さ', '意図', '強さ', 'intent', 'strength'],
+    cpc:    ['想定クリック単価', 'クリック単価', '単価', 'cpc'],
+    volume: ['想定月間検索数', '月間検索数', '検索数', '検索ボリューム', 'volume', 'searches', 'searchvolume'],
+    reason: ['理由', '説明', 'reason', 'note']
+  };
+  const normKey = k => String(k).toLowerCase().replace(/[\s_（）()「」]/g, '');
+  const toHalf = s => String(s).replace(/[０-９．，]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  function pick(o, name) {
+    const keys = Object.keys(o), want = AI_KEYS[name].map(normKey);
+    const k = keys.find(k => want.includes(normKey(k))) || keys.find(k => want.some(w => normKey(k).includes(w)));
+    return k == null ? undefined : o[k];
+  }
+  function parseNum(v) {
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    if (v == null) return null;
+    const t = toHalf(v).replace(/,/g, '');
+    const ns = (t.match(/\d+(?:\.\d+)?万?/g) || []).map(x => x.endsWith('万') ? parseFloat(x) * 10000 : parseFloat(x));
+    if (!ns.length) return null;
+    return ns.length >= 2 && /[〜~\-－ー]/.test(t) ? (ns[0] + ns[1]) / 2 : ns[0];
+  }
+  function parseIntent(v) {
+    const t = toHalf(v ?? '').toLowerCase();
+    if (/除外|negative|exclude/.test(t)) return 'neg';
+    if (/強|高|high|strong/.test(t)) return 'high';
+    if (/中|普通|ふつう|mid|medium/.test(t)) return 'mid';
+    if (/弱|低|low|weak/.test(t)) return 'low';
+    return null;
+  }
+  // 文字列の中から、JSONとして読める { } / [ ] の部分を順に探す
+  function jsonCandidates(text) {
+    const out = [];
+    for (let i = 0; i < text.length && out.length < 20; i++) {
+      const open = text[i];
+      if (open !== '{' && open !== '[') continue;
+      let depth = 0, str = false, esc2 = false;
+      for (let j = i; j < text.length; j++) {
+        const ch = text[j];
+        if (str) { if (esc2) esc2 = false; else if (ch === '\\') esc2 = true; else if (ch === '"') str = false; continue; }
+        if (ch === '"') str = true;
+        else if (ch === '{' || ch === '[') depth++;
+        else if (ch === '}' || ch === ']') { depth--; if (!depth) { out.push(text.slice(i, j + 1)); i = j; break; } }
+      }
+    }
+    return out.sort((a, b) => b.length - a.length);
+  }
+  // JSONの中から、キーワードの一覧（オブジェクトの配列）を集める。キー名に「除外」があれば、その中は除外の候補
+  function collectItems(v, negHint = false, out = []) {
+    if (Array.isArray(v)) {
+      v.forEach(x => {
+        if (typeof x === 'string') out.push({ kw: x, negHint });
+        else if (x && typeof x === 'object') pick(x, 'kw') != null ? out.push(Object.assign({ negHint }, x)) : collectItems(x, negHint, out);
+      });
+    } else if (v && typeof v === 'object') {
+      if (pick(v, 'kw') != null && typeof pick(v, 'kw') !== 'object') out.push(Object.assign({ negHint }, v));
+      else Object.entries(v).forEach(([k, x]) => collectItems(x, negHint || /除外|negative|exclu/i.test(k), out));
+    }
+    return out;
+  }
+  function parseAiAnswer(raw) {
+    const text = toHalf(String(raw || '')).replace(/[“”″]/g, '"').replace(/[‘’]/g, "'").trim();
+    if (!text) return { error: 'AIの回答が貼り付けられていません。AIの返答をすべてコピーして、ここに貼り付けてください。' };
+    const blocks = jsonCandidates(text);
+    const BROKEN = 'JSONの形が崩れていて読み込めませんでした（途中で切れている・カンマや " が足りないなど）。回答が最後まで表示されているか確認して、もう一度コピーしてください。';
+    if (!blocks.length && /[{[]/.test(text)) return { error: BROKEN };
+    if (!blocks.length) return { error: 'JSON（{ } や [ ] で囲まれた部分）が見つかりませんでした。AIに「指定のJSON形式だけで返してください」と伝えて、もう一度作ってもらいましょう。' };
+    let data = null;
+    for (const b of blocks) {
+      for (const t of [b, b.replace(/,\s*([}\]])/g, '$1')]) {
+        try { const d = JSON.parse(t); if (collectItems(d).length) { data = d; break; } } catch (e) { /* 次の候補を試す */ }
+      }
+      if (data) break;
+    }
+    if (!data) {
+      const parsable = blocks.some(b => { try { JSON.parse(b.replace(/,\s*([}\]])/g, '$1')); return true; } catch (e) { return false; } });
+      return { error: parsable
+        ? 'JSONは読めましたが、キーワードの一覧が見つかりませんでした。「キーワード」「検索意図の強さ」などの項目があるか確認してください。'
+        : BROKEN };
+    }
+    const items = [], warns = [], seen = new Set();
+    collectItems(data).forEach((o, n) => {
+      const kw = String(pick(o, 'kw') ?? '').replace(/^[-−]+/, '').replace(/[\[\]"]/g, '').replace(/\s+/g, ' ').trim();
+      const no = `${n + 1}件目${kw ? `「${kw}」` : ''}`;
+      if (!kw) { warns.push(`${no}：キーワードが空なので読み飛ばしました`); return; }
+      if (seen.has(kw)) { warns.push(`${no}：同じキーワードが2回あるので、1つにまとめました`); return; }
+      let intent = parseIntent(pick(o, 'intent'));
+      if (!intent && o.negHint) intent = 'neg';
+      if (!intent) { warns.push(`${no}：検索意図の強さ（強／中／弱／除外）が読めないので読み飛ばしました`); return; }
+      const item = { kw, intent, cpc: 0, volume: 0, reason: String(pick(o, 'reason') ?? '').trim() };
+      if (intent !== 'neg') {
+        const cpc = parseNum(pick(o, 'cpc')), vol = parseNum(pick(o, 'volume'));
+        if (cpc > 0) item.cpc = Math.min(Math.round(cpc), 50000);
+        else { item.cpc = B.industries[st.karte.industry].search.cpc; warns.push(`${no}：クリック単価が読めないので、業種の目安（${yen(item.cpc)}）を使います`); }
+        if (vol > 0) item.volume = Math.min(Math.round(vol), 10000000);
+        else { item.volume = 100; warns.push(`${no}：検索数が読めないので、月100回として計算します`); }
+      }
+      seen.add(kw);
+      items.push(item);
+    });
+    if (!items.length) return { error: 'キーワードを1つも読み込めませんでした。', warns };
+    if (!items.some(x => x.intent !== 'neg')) return { error: '除外キーワードの候補しかありませんでした。使うキーワード（強・中・弱）も作ってもらいましょう。', warns };
+    if (items.length > 40) { warns.push(`候補が${items.length}個あったので、最初の40個だけ読み込みました`); items.length = 40; }
+    return { items, warns };
+  }
+
+  /* ---------- 「AI用にコピー」：指示文＋案件カルテ ---------- */
+  function karteText(k = st.karte) {
+    syncGoals();
+    const lines = allFieldIds().filter(id => shown(id, k) && !(k.media !== 'meta' && (id === 'specialCategory' || id === 'creative'))).map(id => {
+      const v = valueText(id, k);
+      return v && String(v).trim() ? `- ${fieldOf(id).label.replace(/（.*?）/g, '')}：${String(v).trim()}` : '';
+    }).filter(Boolean);
+    lines.unshift(`- 媒体：${(C.media.find(m => m.value === k.media) || {}).label}`);
+    if (k.targetCount) lines.push(`- 目標CV数：月${fmt(k.targetCount)}件`);
+    if (k.targetCpa) lines.push(`- 目標CPA：${yen(k.targetCpa)}`);
+    if (k.upperCpa) lines.push(`- 上限CPA：${yen(k.upperCpa)}`);
+    return lines.join('\n');
+  }
+  const aiPromptText = () => `${C.aiPrompt}\n\n# 案件カルテ\n${karteText()}\n`;
+  const aiReady = () => st.karte.media === 'google' && !!st.karte.industry && !!st.karte.area;
+  const aiCopyBtn = (cls = 'btn-ghost', id = '') => st.karte.media === 'google'
+    ? `<button type="button" class="${cls}" data-action="sim-ai-copy" ${id ? `id="${id}"` : ''} ${aiReady() ? '' : 'disabled'} title="案件カルテとAIへの指示文をクリップボードにコピー">🤖 AI用にコピー</button>` : '';
+  const PLANNER_NOTE = '<p class="sim-alert ok">⚠️ AIの数値は推測なので、実際の検索数はキーワードプランナーで確認しましょう。</p>';
+
+  // キーワード選びの画面の先頭：候補の作り方を選ぶ
+  function renderSourcePicker() {
+    const opts = KW_SOURCES.map(o => o.value === 'sample' && !hasSample()
+      ? Object.assign({}, o, { desc: `${o.desc}（この業種「${B.industries[st.karte.industry].label}」のサンプルはまだありません）` }) : o);
+    return `<section class="field">
+      <div class="field-head"><h3>⓪ キーワード候補の作り方</h3></div>
+      ${radioOpts('kwsrc', 'source', opts, st.setup.source)}
+      ${st.setup.source === 'ai' ? renderAiPanel() : ''}
+      ${st.setup.source === 'template' ? '<p class="sim-hint">型に業種の代表的な言葉を当てはめて作るので、不自然な組み合わせが混ざることもあります。それを見抜くのも練習です。単価・検索数は業種の目安から計算した値です。</p>' : ''}
+    </section>`;
+  }
+  function renderAiPanel() {
+    const a = st.ai, msg = st.aiMsg, has = kwList().length > 0;
+    const cnt = a ? Object.keys(AI_INTENT).map(i => `${AI_INTENT[i]}${a.items.filter(x => x.intent === i).length}`).join('・') : '';
+    const changed = a && (a.industry !== st.karte.industry || (a.areaName || '') !== (st.karte.areaName || '').trim());
+    const steps = `<ol class="sim-ai-steps">
+        <li><b>案件カルテをAIに渡す</b><p class="sim-hint">「AI用にコピー」を押して、ChatGPT・Claude・GeminiなどのAIに貼り付けて送ります。</p>
+          ${aiCopyBtn('btn-ghost')}
+          <details class="sim-ai-preview"><summary>コピーされる文章を見る</summary><textarea class="sim-text sim-ai-prompt" rows="12" readonly aria-label="AIへの指示文">${esc(aiPromptText())}</textarea></details></li>
+        <li><b>AIの回答を貼り付けて取り込む</b><p class="sim-hint">返ってきた文章をそのまま貼り付けてください。前後に説明文があっても、JSONの部分だけを読み込みます。</p>
+          <textarea id="sim-ai-paste" class="sim-text" rows="6" placeholder='例：{"keywords":[{"キーワード":"新宿 歯医者","検索意図の強さ":"強", …}]}' aria-label="AIの回答">${esc(st.aiDraft || '')}</textarea>
+          <div class="end-actions sim-ai-actions"><button type="button" class="btn-primary" data-action="sim-ai-import">取り込む</button></div></li>
+      </ol>`;
+    return `<div class="sim-ai">
+      ${msg && msg.error ? `<p class="sim-alert bad" role="alert">❌ ${esc(msg.error)}</p>` : ''}
+      ${msg && msg.ok ? `<p class="sim-alert sim-good" role="status">✅ ${msg.count}個のキーワード候補を取り込みました。下のキーワード一覧で選んでください。</p>` : ''}
+      ${msg && msg.warns && msg.warns.length ? `<details class="sim-ai-warns" ${msg.error ? 'open' : ''}><summary>読み込みのメモ（${msg.warns.length}件）</summary><ul>${msg.warns.map(w => `<li>${esc(w)}</li>`).join('')}</ul></details>` : ''}
+      ${a ? `<p class="sim-hint">取り込み済みの候補：<b>${a.items.length}個</b>（${esc(cnt)}）・${esc(new Date(a.at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }))}に取り込み・ブラウザに保存済み</p>` : ''}
+      ${changed ? `<p class="sim-alert bad">⚠️ 候補を取り込んだときと、案件カルテ（業種・地域名）が変わっています。今のカルテで「AI用にコピー」して、作り直しましょう。</p>` : ''}
+      ${has ? `<details class="tc-guide sim-guide" ${msg && msg.error ? 'open' : ''}><summary>AIの回答を取り込み直す</summary>${steps}</details>` : steps}
+      ${PLANNER_NOTE}
+    </div>`;
+  }
+  async function copyAiPrompt(btn) {
+    const text = aiPromptText();
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      ta.remove();
+    }
+    if (!ok) { openPromptModal(text); return; }
+    const label = btn.textContent;
+    btn.textContent = '✓ コピーしました';
+    btn.classList.add('sim-copied');
+    setTimeout(() => { btn.textContent = label; btn.classList.remove('sim-copied'); }, 2000);
+  }
+  // コピーできない環境では、指示文を表示して手でコピーしてもらう
+  function openPromptModal(text) {
+    $('#modal-body').innerHTML = `<h2 id="modal-title">AI用の指示文</h2>
+      <p>自動でコピーできませんでした。下の文章をすべて選んでコピーし、AIに貼り付けてください。</p>
+      <textarea class="sim-text sim-ai-prompt" rows="14" readonly>${esc(text)}</textarea>`;
+    $('#modal').hidden = false;
+    document.body.classList.add('modal-open');
+    const ta = $('#modal-body textarea');
+    ta.focus(); ta.select();
+  }
+
+  /* ---------- ブラウザへの保存（案件カルテ＋取り込んだAIの候補） ---------- */
+  const SAVE_KEY = 'gat-sim-case';
+  function saveCase() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ karte: st.karte, sampleId: st.sampleId, kwSource: st.kwSource, ai: st.ai, savedAt: Date.now() })); } catch (e) { /* 保存できなくても動作に影響なし */ }
+  }
+  function loadCase() {
+    try {
+      const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+      return d && d.karte && B.industries[d.karte.industry] ? d : null;
+    } catch (e) { return null; }
+  }
+  function clearCase() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 消せなくても動作に影響なし */ } }
 
   // 配信地域の選択 → sim-benchmarks.js の geoFit のキー
   function geoKey(sel) {
@@ -638,15 +907,18 @@
   /* ---------- Google：キーワード選びの画面 ---------- */
   function renderSetupGoogle() {
     const k = st.karte, s = st.setup, list = kwList();
+    const head = `
+      <p class="lead">${esc(B.industries[k.industry].label)}の広告で使うキーワードを選びます。候補ごとに「使う（マッチタイプも選ぶ）」「除外」「使わない」を決めてください。検索数は、カルテの商圏（${esc(labelOf('area', k.area))}）での目安です。</p>
+      ${goalStrip()}
+      ${renderSourcePicker()}`;
     if (!list.length) {
-      return `<section class="field"><p>この業種（${esc(B.industries[k.industry].label)}）のキーワード候補は準備中です。いまは「歯科・クリニック」「パーソナルジム」「不動産」の3業種で練習できます。カルテで業態を変えるか、媒体をMeta広告にして試してください。</p>
-        <div class="end-actions"><button type="button" class="btn-ghost" data-action="sim-edit">← カルテを修正する</button></div></section>`;
+      return `${head}
+        ${s.source === 'sample' ? `<section class="field"><p>この業種（${esc(B.industries[k.industry].label)}）のサンプル候補は準備中です。いまは「歯科・クリニック」「パーソナルジム」「不動産」の3業種で使えます。上で「型から自動生成」か「AIの回答を取り込む」を選んでください。</p></section>` : ''}
+        <div class="end-actions"><button type="button" class="btn-ghost" data-action="sim-to-diagnosis">← 戻る</button></div>`;
     }
     const scale = B.area[k.area].searchScale;
     const ac = avgCpc();
-    return `
-      <p class="lead">${esc(B.industries[k.industry].label)}の広告で使うキーワードを選びます。候補ごとに「使う（マッチタイプも選ぶ）」「除外」「使わない」を決めてください。検索数は、カルテの商圏（${esc(labelOf('area', k.area))}）での目安です。</p>
-      ${goalStrip()}
+    return `${head}
 
       <section class="field">
         <div class="field-head"><h3>① キーワード</h3></div>
@@ -654,6 +926,7 @@
           ${Object.entries(B.match).map(([m, x]) => `<dt>${esc(x.label)}　<code>${esc(MATCH_CODE[m]('キーワード'))}</code></dt><dd>表示の広がり ×${x.reach}・関係ない検索 約${Math.round(x.irrelevant * 100)}%（除外なしの場合）・クリック率 ×${x.ctr}</dd>`).join('')}
           ${Object.entries(B.intent).map(([i, x]) => `<dt>検索意図：${esc(x.label)}</dt><dd>クリック率 ×${x.ctr}・成約率 ×${x.cvr}</dd>`).join('')}
         </dl></details>
+        ${s.source === 'ai' ? '<p class="sim-hint">🤖 AIの回答から取り込んだ候補です。意図・単価・検索数はAIの推測です。</p>' : s.source === 'template' ? '<p class="sim-hint">🧩 型から自動生成した候補です。</p>' : ''}
         <ul class="kw-list">${list.map((c, i) => renderKwRow(c, i, scale)).join('')}</ul>
 
         <div class="ckw">
@@ -924,6 +1197,8 @@
       google = `
         <section class="field">
           <div class="field-head"><h3>① キーワード</h3><span class="tag">${kwRows.filter(r => r.level === 'good').length} / ${kwRows.length} 正解</span></div>
+          ${st.setup.source === 'ai' ? `<p class="sim-hint">AIの回答を取り込んだ候補は、AIが付けた検索意図の強さ（強＝使う・フレーズ一致か完全一致／中＝使う・フレーズ一致／弱＝使わない／除外＝除外）を正解として採点しています。AIの判定が正しいとは限らないので、自分でも考えてみましょう。</p>${PLANNER_NOTE}` : ''}
+          ${st.setup.source === 'template' ? '<p class="sim-hint">型から作った候補は、型ごとに決めた答えで採点しています。</p>' : ''}
           <ul class="sim-kwres">${kwRows.map(r => `
             <li class="${r.level}">
               <div class="sim-kwres-head"><b>${esc(fill(r.c.kw))}</b><span class="mark ${r.level}">${MARK_TEXT[r.level]}</span></div>
@@ -969,6 +1244,35 @@
         <button type="button" class="btn-ghost" data-action="sim-back-setup">← 設定を直す</button>
         <button type="button" class="btn-primary" data-action="sim-to-result">次へ：成果シミュレーション →</button>
       </div>`;
+  }
+
+  // キーワードの選び方以外の設定（見出し・地域・入札・自分で追加した除外）は、候補を入れ替えても残す
+  function resetCands(source) {
+    const s = st.setup, keep = { headlines: s.headlines, area: s.area, bidding: s.bidding, bid: s.bid, customNeg: s.customNeg };
+    initSetup(source);
+    Object.assign(st.setup, keep);
+  }
+  const kwTouched = () => st.setup.kw.some(x => x.act);
+  function changeSource(v) {
+    if (v === st.setup.source) return;
+    if (kwTouched() && !confirm('キーワード候補を入れ替えると、キーワードの選択（使う・除外・使わない）はリセットされます。よろしいですか？')) { renderKeep(); return; }
+    st.aiMsg = null;
+    resetCands(v);
+    saveCase();
+    renderKeep();
+  }
+  function importAi() {
+    const el = $('#sim-ai-paste');
+    if (el) st.aiDraft = el.value;
+    const r = parseAiAnswer(st.aiDraft);
+    if (r.error) { st.aiMsg = { error: r.error, warns: r.warns || [] }; renderKeep(); return; }
+    if (st.setup.source === 'ai' && kwTouched() && !confirm('新しい候補を取り込むと、今のキーワードの選択はリセットされます。よろしいですか？')) return;
+    st.ai = { items: r.items, at: Date.now(), industry: st.karte.industry, areaName: (st.karte.areaName || '').trim() };
+    st.aiMsg = { ok: true, count: r.items.length, warns: r.warns };
+    st.aiDraft = '';
+    resetCands('ai');
+    saveCase();
+    renderKeep();
   }
 
   function renderKeep() {
@@ -1194,7 +1498,7 @@
     return out;
   }
   const tokensIn = (neg, q) => neg.split(/\s+/).filter(Boolean).every(w => q.includes(w));
-  const termsOf = gid => ((C.searchTerms[st.karte.industry] || {}).groups || {})[gid] || [];
+  const termsOf = gid => (searchTermsOf().groups || {})[gid] || [];
   // 除外キーワードで、ある種類の関係ない検索をどれだけ防げているか（0〜1）
   function groupBlockFrac(g, negs) {
     if (negs.some(n => n.group === g.id)) return 1;
@@ -1206,7 +1510,7 @@
   const VARIANT_W = { exact: [1], phrase: [0.7, 0.15, 0.15], broad: [0.5, 0.2, 0.15, 0.15] };
   function variantsFor(text, match) {
     const ws = VARIANT_W[match];
-    const vs = ((C.searchTerms[st.karte.industry] || {}).variants || []).filter(v => !text.includes(v));
+    const vs = (searchTermsOf().variants || []).filter(v => !text.includes(v));
     return ws.map((w, j) => ({ q: j === 0 ? text : `${text} ${vs[j - 1] || ''}`.trim(), w })).filter((v, j, a) => a.findIndex(x => x.q === v.q) === j);
   }
 
@@ -1924,6 +2228,7 @@
             ${k.media === 'meta' ? row('特別カテゴリ', esc(labelOf('specialCategory', k.specialCategory))) : ''}
             ${row('メモ', (k.memo || '').trim() ? esc(k.memo.trim()) : '')}
           </dl>
+          ${k.media === 'google' ? `<div class="sim-dock-ai">${aiCopyBtn('btn-ghost sm')}</div>` : ''}
         </div>
       </aside>`;
   }
@@ -1960,6 +2265,11 @@
     st.setup = null;
     st.seed = 0;
     st.ops = null;
+    st.kwSource = null;
+    st.ai = null;
+    st.aiMsg = null;
+    st.aiDraft = '';
+    st.saved = loadCase();
     st.dirty = false;
     render();
     showSim();
@@ -2021,9 +2331,34 @@
         break;
       }
       case 'sim-help': openHelp(t.dataset.id); break;
+      case 'sim-ai-copy': copyAiPrompt(t); break;
+      case 'sim-ai-import': importAi(); break;
+      case 'sim-load-saved': {
+        const d = st.saved;
+        if (!d) return;
+        if (st.dirty && !confirm('入力中の内容を、保存されている案件で置き換えますか？')) return;
+        st.karte = Object.assign(blankKarte(), d.karte);
+        st.sampleId = d.sampleId || null;
+        st.kwSource = d.kwSource || null;
+        st.ai = d.ai || null;
+        st.aiMsg = null;
+        st.setup = null;
+        st.saved = null;
+        st.dirty = true;
+        updateBadge();
+        render();
+        break;
+      }
+      case 'sim-clear-saved':
+        if (!confirm('ブラウザに保存されている案件（取り込んだAIの候補を含む）を削除しますか？')) return;
+        clearCase();
+        st.saved = null;
+        renderKeep();
+        break;
       case 'sim-dock-close': toggleDock(false); break;
       case 'sim-to-setup':
         if (setupStale()) initSetup();
+        saveCase();
         st.phase = 'setup';
         render();
         window.scrollTo(0, 0);
@@ -2110,6 +2445,7 @@
         const h0 = st.ops.history[0];
         st.setup = clone(h0.setup);
         st.karte = clone(h0.karte);
+        st.kwSource = st.setup.source;
         st.ops = null;
         newSeed();
         st.phase = 'setup';
@@ -2137,6 +2473,7 @@
         syncGoals();
         if (missing().length || !st.karte.targetCount || !st.karte.targetCpa) return;
         st.phase = 'diagnosis';
+        saveCase();
         render();
         window.scrollTo(0, 0);
         break;
@@ -2181,6 +2518,10 @@
       renderKeep();
       return;
     }
+    if (d.kwsrc && st.setup) {
+      changeSource(e.target.value);
+      return;
+    }
     if (d.setup === 'area' || d.setup === 'bidding') {
       st.setup[d.setup] = e.target.value;
       if (d.setup === 'bidding') renderKeep(); else updateSetupRest();
@@ -2220,6 +2561,10 @@
       const cnt = changesList({ setup: st.setup, karte: st.karte }, st.ops.draft).length;
       const r = $('.sim-submit .sim-rest');
       if (r) r.innerHTML = cnt ? `変更：<b class="sim-changes">${cnt}件</b>` : '変更なし（このまま配信）';
+      return;
+    }
+    if (e.target.id === 'sim-ai-paste') {
+      st.aiDraft = e.target.value;
       return;
     }
     if (e.target.dataset.setup === 'bid') {

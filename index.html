@@ -743,6 +743,23 @@
   .sim-alert { margin: 12px 0 0; padding: 10px 14px; border-radius: var(--radius); font-size: 14px; }
   .sim-alert.bad { background: var(--bad-soft); color: var(--bad); }
   .sim-alert.ok { background: var(--ok-soft); color: var(--ok); }
+  .sim-alert.sim-good { background: var(--good-soft); color: var(--good); }
+  /* キーワード候補の作り方：AIの回答を取り込む */
+  .sim-ai { margin-top: 12px; }
+  .sim-ai-steps { margin: 12px 0 0; padding-left: 1.4em; display: grid; gap: 14px; }
+  .sim-ai-steps > li > b { display: block; margin-bottom: 6px; }
+  .sim-ai-steps .sim-hint { margin: 0 0 8px; }
+  .sim-ai-preview { margin-top: 8px; font-size: 13px; }
+  .sim-ai-preview summary { cursor: pointer; color: var(--muted); }
+  .sim-ai-prompt { margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .sim-ai-actions { margin-top: 8px; justify-content: flex-end; }
+  .sim-ai-warns { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .sim-ai-warns ul { margin: 6px 0 0; padding-left: 1.2em; }
+  .sim-copied { background: var(--good-soft) !important; color: var(--good) !important; border-color: var(--good) !important; }
+  .sim-saved p { margin: 0; font-size: 14px; }
+  .sim-saved small { margin-left: 8px; color: var(--muted); }
+  .sim-saved .end-actions { margin-top: 10px; justify-content: flex-end; }
+  .sim-dock-ai { margin-top: 10px; }
   .sim-goal-strip { margin: 16px 0 4px; }
   .sim-guide { margin: 8px 0 12px; }
   .sim-guide code { font-size: 12px; background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
