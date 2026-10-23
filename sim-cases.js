@@ -397,23 +397,23 @@ window.SIM_CASES = {
   /* 広告見出しの候補（最大3つ選ぶ） */
   headlines: {
     dental: [
-      { text: '{area}駅すぐの歯医者｜WEB予約24時間OK', quality: 'high', themes: ['general'],
+      { text: '{area}駅すぐの歯医者｜WEB予約OK', quality: 'high', themes: ['general'],
         reason: '地域名と「歯医者」「予約」が入っていて、地域名＋歯医者で検索した人にぴったり合います。' },
-      { text: '{area}のインプラント｜費用の目安とカウンセリング', quality: 'high', themes: ['implant'],
+      { text: '{area}のインプラント相談', quality: 'high', themes: ['implant'],
         reason: 'インプラント系のキーワードと合う見出しです。費用が気になる人の不安にも答えています。' },
-      { text: '痛みに配慮した治療｜夜19時まで診療', quality: 'high', themes: ['pain'],
+      { text: '痛みに配慮｜夜19時まで診療', quality: 'high', themes: ['pain'],
         reason: '「歯 痛い」「夜 やってる」と検索した人の悩みに合う見出しです。' },
       { text: '地域の皆さまの健康を守ります', quality: 'mid', themes: [],
         reason: '間違いではありませんが、どのキーワードとも具体的に合っていない、ありきたりな見出しです。' },
-      { text: '絶対に痛くない！日本一の歯科医院', quality: 'violation', themes: [],
+      { text: '絶対痛くない！日本一の歯科', quality: 'violation', themes: [],
         reason: '「絶対」「日本一」は根拠を示せない誇大な表現で、医療広告のルール（医療広告ガイドライン）に反するおそれがあります。審査で広告が止まる原因になります。' }
     ],
     gym: [
-      { text: '{area}のパーソナルジム｜無料体験受付中', quality: 'high', themes: ['general', 'trial'],
+      { text: '{area}のパーソナルジム｜無料体験', quality: 'high', themes: ['general', 'trial'],
         reason: '地域名・パーソナルジム・無料体験が入っていて、本命のキーワードとよく合っています。' },
-      { text: '女性専用パーソナルジム｜{area}駅徒歩3分', quality: 'high', themes: ['women'],
+      { text: '女性専用ジム｜{area}駅3分', quality: 'high', themes: ['women'],
         reason: '女性向けのキーワードと合う見出しです。ターゲットにも合っています。' },
-      { text: '2ヶ月で理想の体へ｜食事指導つきダイエット', quality: 'high', themes: ['diet'],
+      { text: '2ヶ月ダイエット｜食事指導つき', quality: 'high', themes: ['diet'],
         reason: 'ダイエット系のキーワードと合う見出しです。コースの期間も伝わります。' },
       { text: '健康的な毎日を応援します', quality: 'mid', themes: [],
         reason: '間違いではありませんが、どのキーワードとも具体的に合っていない、ありきたりな見出しです。' },
@@ -421,9 +421,9 @@ window.SIM_CASES = {
         reason: '「誰でも」「必ず」と効果を言い切る表現は、景品表示法などに反するおそれがあります。審査で広告が止まる原因になり、信頼も失います。' }
     ],
     realestate: [
-      { text: '{area}の賃貸なら｜1K・学生向け物件多数', quality: 'high', themes: ['general', 'student'],
-        reason: '地域名・賃貸・1K・学生が入っていて、本命のキーワードとよく合っています。' },
-      { text: '一人暮らしを応援｜初期費用の相談OK', quality: 'high', themes: ['student'],
+      { text: '{area}の賃貸｜学生向け1K多数', quality: 'high', themes: ['general', 'student'],
+        reason: '地域名・賃貸・学生・1Kが入っていて、本命のキーワードとよく合っています。' },
+      { text: '一人暮らし応援｜初期費用を相談', quality: 'high', themes: ['student'],
         reason: '学生・新社会人向けのキーワードと合う見出しです。' },
       { text: '{area}でペット可の賃貸を探すなら', quality: 'high', themes: ['general'],
         reason: '地域名＋賃貸のキーワードと合う見出しです。' },
@@ -433,8 +433,53 @@ window.SIM_CASES = {
         reason: '根拠のない「最安値」「どこよりも」は、不当表示（不動産の表示に関するルール・景品表示法）にあたるおそれがあります。審査で広告が止まる原因になります。' }
     ]
   },
-  headlineMax: 3,
-  descriptionMax: 2, // 説明文（AIから広告文を取り込んだときだけ選ぶ）
+  /* 説明文の候補（headlines と同じ形。Googleの説明文は全角45文字・半角90文字まで） */
+  descriptions: {
+    dental: [
+      { text: '{area}駅から徒歩3分の歯医者。WEB予約は24時間受付、当日の急な痛みにも対応します。', quality: 'high', themes: ['general', 'pain'],
+        reason: '地域名・歯医者・予約が入っていて、本命のキーワードや「痛い」で探している人に合います。' },
+      { text: 'インプラントは無料カウンセリングで、費用の目安と治療の流れを丁寧にご説明します。', quality: 'high', themes: ['implant'],
+        reason: 'インプラント系のキーワードと合い、費用が気になる人の不安にも答えています。' },
+      { text: '地域の皆さまに愛される歯科医院を目指して、スタッフ一同がんばっています。', quality: 'mid', themes: [],
+        reason: '間違いではありませんが、何ができる医院なのかが伝わらない、ありきたりな説明文です。' },
+      { text: '絶対に痛くない治療で、どんな歯の悩みも必ず解決します。', quality: 'violation', themes: [],
+        reason: '「絶対」「必ず」と効果を言い切る表現は、医療広告ガイドラインに反するおそれがあり、審査で止まる原因になります。' }
+    ],
+    gym: [
+      { text: '{area}駅すぐのパーソナルジム。まずは無料体験で、トレーニングと食事指導を体験できます。', quality: 'high', themes: ['general', 'trial'],
+        reason: '地域名・パーソナルジム・無料体験が入っていて、本命のキーワードとよく合っています。' },
+      { text: '女性トレーナーが担当。2ヶ月のダイエットコースで、無理なく続く体づくりをサポート。', quality: 'high', themes: ['women', 'diet'],
+        reason: '女性向け・ダイエット系のキーワードと合う説明文です。' },
+      { text: '健康的な毎日のために、一緒に運動を始めてみませんか。', quality: 'mid', themes: [],
+        reason: '間違いではありませんが、どんなジムなのかが伝わらない、ありきたりな説明文です。' },
+      { text: '誰でも1ヶ月で必ず10kgやせる、日本一のトレーニングです。', quality: 'violation', themes: [],
+        reason: '「誰でも」「必ず」「日本一」は根拠を示せない表現で、景品表示法などに反するおそれがあります。' }
+    ],
+    realestate: [
+      { text: '{area}の賃貸物件を多数ご紹介。学生・新社会人向けの1Kも豊富です。オンライン内見OK。', quality: 'high', themes: ['general', 'student'],
+        reason: '地域名・賃貸・学生・1Kが入っていて、本命のキーワードとよく合っています。' },
+      { text: '初めての一人暮らしも安心。初期費用の相談や、家具付き物件のご案内もできます。', quality: 'high', themes: ['student'],
+        reason: '学生・新社会人向けのキーワードと合う説明文です。' },
+      { text: 'お客さまにぴったりの住まい探しを、心をこめてお手伝いします。', quality: 'mid', themes: [],
+        reason: '間違いではありませんが、どんな物件を扱っているのかが伝わらない、ありきたりな説明文です。' },
+      { text: '業界最安値の家賃保証。どこよりも安い物件が必ず見つかります。', quality: 'violation', themes: [],
+        reason: '根拠のない「最安値」「どこよりも」「必ず」は不当表示にあたるおそれがあり、審査で止まる原因になります。' }
+    ]
+  },
+  commonDescriptions: [
+    { text: '{area}の{main}なら、お気軽にご相談ください。{act}はWEBで受け付けています。', quality: 'high', themes: ['general'],
+      reason: '地域名と業種が入っていて、本命のキーワードとよく合っています。申し込み方法も伝わります。' },
+    { text: '{main}の料金と口コミを公開中。初めての方にもわかりやすくご案内します。', quality: 'high', themes: ['general'],
+      reason: '業種の言葉が入っていて、料金や評判を比べている人の疑問に答えています。' },
+    { text: 'お客さま一人ひとりに寄り添い、心をこめて対応いたします。', quality: 'mid', themes: [],
+      reason: '間違いではありませんが、どのキーワードとも具体的に合っていない、ありきたりな説明文です。' },
+    { text: '業界No.1の実績で、絶対に満足できるサービスをお約束します。', quality: 'violation', themes: [],
+      reason: '根拠のない「No.1」「絶対」は、景品表示法などに反するおそれがあります。審査で広告が止まる原因になります。' }
+  ],
+
+  // 広告に使う見出し・説明文の数（実際のGoogle広告：見出しは3〜15個、説明文は2〜4個）
+  headlineMin: 3, headlineMax: 15,
+  descriptionMin: 2, descriptionMax: 4,
 
   /* =========================================================
      段階4：検索語句レポートに出る語句
@@ -555,13 +600,13 @@ window.SIM_CASES = {
     { id: 'other', label: 'その他（運用しながら見つける）', share: 0.25, words: [] }
   ],
   commonHeadlines: [
-    { text: '{area}の{main}｜{act}はこちら', quality: 'high', themes: ['general'],
-      reason: '地域名と業種、申し込みの言葉が入っていて、本命のキーワードとよく合っています。' },
-    { text: '{main}をお探しの方へ｜料金・口コミを公開中', quality: 'high', themes: ['general'],
-      reason: '料金や口コミで比べている人の疑問に答える見出しで、検討中のキーワードとも合います。' },
-    { text: 'お客さま一人ひとりに寄り添います', quality: 'mid', themes: [],
+    { text: '{area}の{main}', quality: 'high', themes: ['general'],
+      reason: '地域名と業種が入っていて、本命の「地域名＋業種」のキーワードとよく合っています。' },
+    { text: '{main}をお探しなら', quality: 'high', themes: ['general'],
+      reason: '業種の言葉が入っていて、探している人に「ここで見つかる」と伝わる見出しです。' },
+    { text: '一人ひとりに寄り添います', quality: 'mid', themes: [],
       reason: '間違いではありませんが、どのキーワードとも具体的に合っていない、ありきたりな見出しです。' },
-    { text: '業界No.1！絶対に満足できます', quality: 'violation', themes: [],
+    { text: '業界No.1！絶対に満足', quality: 'violation', themes: [],
       reason: '根拠のない「No.1」「絶対」は、景品表示法などに反するおそれがあります。審査で広告が止まる原因になります。' }
   ],
   commonSearchTerms: {

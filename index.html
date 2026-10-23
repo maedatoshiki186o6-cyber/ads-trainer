@@ -755,9 +755,24 @@
   .sim-ai-pastelabel { display: block; margin-top: 14px; }
   .sim-ai-done { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .sim-adhead { margin: 14px 0 6px; font-size: 14px; }
-  .sim-hl-own { margin-top: 12px; }
-  .sim-hl-own .sim-alert { margin-top: 6px; }
-  .opt.sim-own .x { margin-left: auto; align-self: center; }
+  /* 広告文（見出し・説明文）の一覧・編集・追加 */
+  .sim-ad-kind { margin-top: 6px; }
+  .sim-ad-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .sim-ad-row { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; background: var(--surface); }
+  .sim-ad-row.on { border-color: var(--good); background: var(--good-soft); }
+  .sim-ad-check { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 14px; }
+  .sim-ad-check input { margin-top: 3px; flex: none; }
+  .sim-ad-text { min-width: 0; overflow-wrap: anywhere; }
+  .sim-ad-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 4px 0 0 24px; font-size: 12px; color: var(--muted); }
+  .sim-ad-tools { display: inline-flex; gap: 6px; margin-left: auto; }
+  .sim-ad-del { color: var(--bad); }
+  .sim-ad-count { font-size: 12px; color: var(--muted); }
+  .sim-ad-count.over { color: var(--bad); font-weight: 600; }
+  .sim-ad-row.editing { border-color: var(--text); }
+  .sim-ad-editbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; }
+  .sim-ad-new { margin-top: 10px; }
+  .sim-ad-new .sim-label { display: block; margin-bottom: 4px; }
+  .sim-ad-new .sim-alert, .sim-ad-row .sim-alert { margin-top: 6px; }
   .sim-menus { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
   .sim-menus li { display: flex; align-items: center; gap: 6px; }
   .sim-menus li > .sim-text { flex: 1; min-width: 0; }
@@ -1019,10 +1034,10 @@
 <script src="data-meta.js"></script>
 <script src="data-meta-prep.js"></script>
 <!-- 実践シミュレーション（目安の数値 → 案件データ → 画面と計算） -->
-<script src="sim-benchmarks.js"></script>
-<script src="sim-cases.js"></script>
-<script src="sim-prompts.js"></script>
-<script src="sim.js"></script>
+<script src="sim-benchmarks.js?v=20261023-2"></script>
+<script src="sim-cases.js?v=20261023-2"></script>
+<script src="sim-prompts.js?v=20261023-2"></script>
+<script src="sim.js?v=20261023-2"></script>
 <script>
 (function () {
   'use strict';

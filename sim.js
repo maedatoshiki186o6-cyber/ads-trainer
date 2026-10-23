@@ -102,7 +102,8 @@
     // AIのパネルの状態（コピーしたか・貼り付け途中の文章・取り込みの結果）
     aiFlow: { kw: { copied: false, draft: '', msg: null }, ad: { copied: false, draft: '', msg: null }, terms: { copied: false, draft: '', msg: null } },
     saved: null,      // ブラウザに保存されている前回の続き（カルテ画面から再開できる）
-    matchHelp: null,  // マッチタイプの違い（説明）を開いているキーワードの番号
+    help: { act: null, match: null }, // 「？ 違いを見る」で開いている説明（act：使う・除外・使わない／match：マッチタイプ）のキーワード番号
+    adEdit: null,     // 書き換え中の広告文 { mode, kind, i }
     dirty: false
   };
 
@@ -615,7 +616,8 @@
       meta: {}
     };
     setAds(st.adSource || 'auto');
-    st.matchHelp = null;
+    st.help = { act: null, match: null };
+    st.adEdit = null;
   }
   // 広告文の候補（見出し hls・説明文 descs）を作り方に合わせて入れ替える。選択はリセット
   function setAds(adSource) {
@@ -623,9 +625,13 @@
     const toAd = x => ({ text: x.text, quality: x.quality, themes: [], kws: x.kws, ai: true, reason: `${x.reason || '（AIの理由なし）'}（AIの評価：${AD_RATING[x.quality]}）` });
     st.adSource = s.adSource = adSource;
     s.adAt = ai ? st.ai.ad.at : null;
-    const own = (s.hls || []).filter(h => h.own); // 自分で追加した見出しは、作り方を変えても残す
-    s.hls = [...(adSource === 'ai' ? (ai ? st.ai.ad.items.filter(x => x.kind === 'headline').map(toAd) : []) : (C.headlines[st.karte.industry] || C.commonHeadlines)), ...own];
-    s.descs = ai ? st.ai.ad.items.filter(x => x.kind === 'description').map(toAd) : [];
+    // 自作・書き換えた文は、作り方を変えても残す
+    const ownH = (s.hls || []).filter(h => h.own), ownD = (s.descs || []).filter(h => h.own);
+    const defD = clone(C.descriptions[st.karte.industry] || C.commonDescriptions);
+    const aiD = ai ? st.ai.ad.items.filter(x => x.kind === 'description').map(toAd) : [];
+    s.hls = [...(adSource === 'ai' ? (ai ? st.ai.ad.items.filter(x => x.kind === 'headline').map(toAd) : []) : clone(C.headlines[st.karte.industry] || C.commonHeadlines)), ...ownH];
+    // 説明文：AIの文があればそれ、なければ用意した文（AIを選んで、まだ取り込んでいないときは空）
+    s.descs = [...(adSource === 'ai' ? (aiD.length ? aiD : ai ? defD : []) : defD), ...ownD];
     s.headlines = [];
     s.descriptions = [];
   }
@@ -1044,6 +1050,10 @@
     st.phase = !need || (need === 'setup' ? st.setup : st.ops) ? d.phase || 'karte' : 'karte';
     if (st.phase === 'result' && !st.seed) newSeed();
     st.saved = null;
+    st.help = { act: null, match: null }; // 説明はいつも閉じた状態から
+    st.adEdit = null;
+    ensureAds(st.setup);
+    if (st.ops && st.ops.draft) ensureAds(st.ops.draft.setup);
     st.dirty = true;
     syncGoals();
     try { render(); } catch (e) { st.phase = 'karte'; st.setup = null; st.ops = null; render(); }
@@ -1129,8 +1139,7 @@
     const und = s.kw.filter(x => !x.act || (x.act === 'add' && !x.match)).length;
     if (und) out.push(`キーワード${und}個`);
     else if (!s.kw.some(x => x.act === 'add')) out.push('使うキーワード（1つ以上）');
-    if (!s.headlines.length) out.push('広告見出し');
-    if (s.descs.length && !s.descriptions.length) out.push('説明文');
+    out.push(...adShort(s));
     if (!s.area) out.push('配信地域');
     if (!s.bidding) out.push('入札戦略');
     if (s.bidding === 'manual' && !(s.bid > 0)) out.push('入札額');
@@ -1228,19 +1237,21 @@
   }
 
   function renderKwRow(c, i, scale) {
-    const sel = st.setup.kw[i], text = fill(c.kw), help = st.matchHelp === i;
+    const sel = st.setup.kw[i], text = fill(c.kw), actHelp = st.help.act === i, matchHelp = st.help.match === i;
+    const helpBtn = (kind, open, what) => `<button type="button" class="btn-ghost sm sim-mhelp-btn" data-action="sim-help-toggle" data-kind="${kind}" data-i="${i}" aria-expanded="${open}" aria-label="${esc(what)}の違いを${open ? '閉じる' : '見る'}">${open ? '× 閉じる' : '？ 違いを見る'}</button>`;
     const meta = isTermKw(c)
       ? '<span class="sim-kwm">除外キーワードの候補になる単語</span>'
       : `<span class="sim-kwm">意図 <b class="sim-int-${c.intent}">${esc(B.intent[c.intent].label)}</b></span><span class="sim-kwm">想定CPC <b>${yen(c.cpc)}</b></span><span class="sim-kwm">検索数 <b>月${fmt(c.volume * scale)}回</b></span>`;
     return `<li class="kw-row" id="sim-kw-${i}">
       <div class="kw-top"><span class="kw-text">${esc(text)}</span>
         <span class="seg" role="group" aria-label="${esc(text)}の扱い">${['add', 'negative', 'skip'].map(a => `<button type="button" class="seg-btn seg-${a} ${sel.act === a ? 'on' : ''}" aria-pressed="${sel.act === a}" data-action="sim-kw" data-i="${i}" data-val="${a}">${ACT_LABEL[a]}</button>`).join('')}</span>
-        <button type="button" class="btn-ghost sm sim-mhelp-btn" data-action="sim-match-help" data-i="${i}" aria-expanded="${help}">${help ? '× 閉じる' : '？ 違いを見る'}</button></div>
+        ${helpBtn('act', actHelp, '使う・除外・使わない')}</div>
       <div class="sim-kwmeta">${meta}</div>
-      ${help ? renderActCards(c, i) : ''}
+      ${actHelp ? renderActCards(c, i) : ''}
       ${sel.act === 'add' ? `<div class="sim-match"><span class="seg" role="group" aria-label="マッチタイプ">${Object.keys(B.match).map(m => `<button type="button" class="seg-btn ${sel.match === m ? 'on seg-add' : ''}" aria-pressed="${sel.match === m}" data-action="sim-match" data-i="${i}" data-val="${m}">${esc(B.match[m].label)}</button>`).join('')}</span>
         ${sel.match ? `<code class="sim-mcode">${esc(MATCH_CODE[sel.match](text))}</code>` : '<span class="sim-req">マッチタイプを選んでください</span>'}
-        ${help ? `<p class="sim-mhelp-title">マッチタイプの違い</p>${renderMatchCards(c, i)}` : ''}</div>` : ''}
+        ${helpBtn('match', matchHelp, 'マッチタイプ')}
+        ${matchHelp ? renderMatchCards(c, i) : ''}</div>` : ''}
     </li>`;
   }
 
@@ -1299,65 +1310,140 @@
       </button>`).join('')}</div>`;
   }
 
-  /* ---------- 自分で追加する見出し ----------
-   * 品質は、使うキーワードの言葉が入っているか（adMatches）で決まる。根拠を示せない表現が入っていたら「違反」
+  /* ---------- 広告文（見出し・説明文）の編集・追加・削除 ----------
+   * 用意した文・AIの文・自作の文のどれでも、書き換え・削除・追加ができる（設定の画面と運用改善の画面）。
+   * 書き換えた文・自作の文は own:true になり、品質は「使うキーワードの言葉が入っているか（adMatches）」で決まる。
+   * 根拠を示せない表現（NG_WORDS）が入っていたら「違反」。
+   * 文字数は実際のGoogle広告に合わせる：見出しは全角15文字（半角30文字）、説明文は全角45文字（半角90文字）まで。
    */
   const NG_WORDS = ['絶対', '必ず', '日本一', '世界一', 'no.1', 'no1', 'ナンバーワン', '業界一', '業界初', '最安', '最高', '100%', '誰でも', '確実', '完璧'];
   const ngOf = text => NG_WORDS.filter(w => toHalf(text).toLowerCase().includes(w));
-  function ownHeadline(text) {
+  const AD_KIND = {
+    headline:    { label: '見出し', list: 'hls',   sel: 'headlines',    attr: 'hl', min: () => C.headlineMin,    max: () => C.headlineMax },
+    description: { label: '説明文', list: 'descs', sel: 'descriptions', attr: 'ds', min: () => C.descriptionMin, max: () => C.descriptionMax }
+  };
+  function ownAd(text) {
     const ng = ngOf(text);
     return { text, quality: ng.length ? 'violation' : 'high', themes: [], kws: [], own: true, ng };
   }
-  // 自作の見出しの解説（採点・入力欄の下に出す）
+  // 自作・書き換えた文の解説（採点に出す）
   function ownReason(h, s = st.setup) {
     if (h.ng && h.ng.length) return `「${h.ng.join('」「')}」は、根拠を示せない言い切り・最上級の表現で、景品表示法や業界のルールに反するおそれがあります。審査で広告が止まる原因になります。`;
     const hits = s.kw.map((x, i) => ({ x, c: s.cands[i] })).filter(({ x, c }) => x.act === 'add' && !isTermKw(c) && adMatches(h, c)).map(({ c }) => fill(c.kw));
     return hits.length ? `使うキーワード「${hits.join('」「')}」の言葉が入っているので、そのキーワードの品質が上がります。`
-      : '使うキーワードの言葉が入っていないので、この見出しだけでは品質は「ふつう」です。キーワードの言葉を入れてみましょう。';
+      : '使うキーワードの言葉が入っていないので、この文だけでは品質は「ふつう」です。キーワードの言葉を入れてみましょう。';
   }
-  function addHeadline(mode) {
-    const input = $(`#sim-hl-text-${mode}`), err = $(`#sim-hl-err-${mode}`);
-    const text = normSp(input.value), s = mode === 'ops' ? st.ops.draft.setup : st.setup;
-    const fail = msg => { err.textContent = msg; err.hidden = false; input.focus(); };
-    if (!text) return fail('見出しを入力してください。');
-    if (widthOf(text) > AD_LIMIT.headline) return fail(`長すぎます（全角${Math.ceil(widthOf(text) / 2)}文字）。Googleの見出しは全角15文字（半角30文字）までです。`);
-    if (s.hls.some(h => fill(h.text) === text)) return fail('同じ見出しがすでにあります。');
-    s.hls.push(ownHeadline(text));
-    if (s.headlines.length < C.headlineMax) s.headlines.push(s.hls.length - 1);
+  const adSetupOf = mode => mode === 'ops' ? st.ops.draft.setup : st.setup;
+  // 広告に使う数が足りないもの（足りなければ次へ進めない）
+  const adShort = s => Object.values(AD_KIND).filter(K => (s[K.sel] || []).length < K.min()).map(K => `${K.label}（あと${K.min() - s[K.sel].length}個）`);
+  // 文字数の表示：全角に換算した文字数（半角は0.5文字）
+  const countText = (text, kind) => {
+    const w = widthOf(text), lim = AD_LIMIT[kind], left = (lim - w) / 2;
+    return { over: w > lim, text: w > lim ? `${(w - lim) / 2}文字オーバー（全角${lim / 2}文字まで）` : `あと${left}文字（全角${lim / 2}文字まで）` };
+  };
+  // 入力した文を確かめる（問題があればエラーの文、なければ null）
+  function adInputError(s, kind, text, skip = -1) {
+    const K = AD_KIND[kind];
+    if (!text) return `${K.label}を入力してください。`;
+    if (widthOf(text) > AD_LIMIT[kind]) return `長すぎます。${K.label}は全角${AD_LIMIT[kind] / 2}文字（半角${AD_LIMIT[kind]}文字）までです。`;
+    if (s[K.list].some((h, i) => i !== skip && fill(h.text) === text)) return `同じ${K.label}がすでにあります。`;
+    return null;
+  }
+  const showAdError = (id, msg) => { const el = $(`#${id}`); if (el) { el.textContent = msg; el.hidden = false; } };
+  function addAd(mode, kind) {
+    const K = AD_KIND[kind], s = adSetupOf(mode), input = $(`#sim-ad-new-${mode}-${kind}`);
+    const text = normSp(input ? input.value : '');
+    const err = adInputError(s, kind, text);
+    if (err) { showAdError(`sim-ad-err-${mode}-${kind}`, err); if (input) input.focus(); return; }
+    s[K.list].push(ownAd(text));
+    if (s[K.sel].length < K.max()) s[K.sel].push(s[K.list].length - 1);
     st.dirty = true;
     renderKeep();
-    const next = $(`#sim-hl-text-${mode}`);
+    const next = $(`#sim-ad-new-${mode}-${kind}`);
     if (next) next.focus();
   }
-  // 自作の見出しを消す（設定の画面だけ。番号がずれるので、選んでいる見出しの番号も直す）
-  function removeHeadline(j) {
-    const s = st.setup;
-    s.hls.splice(j, 1);
-    s.headlines = s.headlines.filter(x => x !== j).map(x => x > j ? x - 1 : x);
+  function saveAdEdit() {
+    const e = st.adEdit;
+    if (!e) return;
+    const K = AD_KIND[e.kind], s = adSetupOf(e.mode), input = $('#sim-ad-edit');
+    const text = normSp(input ? input.value : '');
+    const err = adInputError(s, e.kind, text, e.i);
+    if (err) { showAdError('sim-ad-edit-err', err); if (input) input.focus(); return; }
+    const before = s[K.list][e.i];
+    if (fill(before.text) !== text) s[K.list][e.i] = Object.assign(ownAd(text), { edited: !before.own || before.edited });
+    st.adEdit = null;
+    st.dirty = true;
+    renderKeep();
+  }
+  // 削除すると番号がずれるので、選んでいる番号も直す
+  function removeAd(mode, kind, j) {
+    const K = AD_KIND[kind], s = adSetupOf(mode), h = s[K.list][j];
+    if (!h || !confirm(`${K.label}「${fill(h.text)}」を削除しますか？`)) return;
+    s[K.list].splice(j, 1);
+    s[K.sel] = s[K.sel].filter(x => x !== j).map(x => x > j ? x - 1 : x);
+    st.adEdit = null;
+    st.dirty = true;
     renderKeep();
   }
 
-  // 見出し・説明文のチェックボックス（設定の画面：mode='setup'／運用改善：mode='ops'）
+  // 見出し・説明文の一覧（設定の画面：mode='setup'／運用改善：mode='ops'）
   function renderAdPicks(s, mode) {
-    const form = `<div class="ckw sim-hl-own">
-        <h4>見出しを自分で追加 <small>（全角15文字・半角30文字まで）</small></h4>
-        <div class="ckw-form"><input type="text" id="sim-hl-text-${mode}" class="sim-text" data-hlmode="${mode}" placeholder="例：${esc(areaWord())}駅すぐの${esc(tplWords().main)}｜WEB予約OK" aria-label="追加する見出し"><button type="button" class="btn-ghost" data-action="sim-hl-add" data-mode="${mode}">追加</button></div>
-        <p class="sim-alert bad" id="sim-hl-err-${mode}" role="alert" hidden></p>
-        <p class="sim-hint">使うキーワードの言葉を入れると品質が上がります。「絶対」「日本一」など根拠のない表現は、審査で止まる原因になります。</p>
-      </div>`;
-    if (!s.hls.length) return `<p class="sim-hint" id="sim-hl-list">AIの回答を取り込むと、ここに見出しと説明文の候補が出ます。自分で見出しを追加することもできます。</p>${form}`;
-    const box = (list, sel, max, attr, kind) => `<div class="opts multi">${list.map((h, i) => {
-      const text = fill(h.text), over = (h.ai || h.own) && widthOf(text) > AD_LIMIT[kind];
-      const at = mode === 'ops' ? `data-opsf="${attr}"` : `data-${attr}="${i}"`;
-      const del = h.own && mode === 'setup' ? `<button type="button" class="x" data-action="sim-hl-remove" data-i="${i}" aria-label="${esc(text)}を削除">×</button>` : '';
-      return `<label class="opt ${h.own ? 'sim-own' : ''}"><input type="checkbox" value="${i}" ${at} ${sel.includes(i) ? 'checked' : ''} ${!sel.includes(i) && sel.length >= max ? 'disabled' : ''}>
-        <span class="opt-main"><span class="opt-label">${h.own ? '<span class="tag">自作</span> ' : ''}${esc(text)}</span>${h.ai || h.own ? `<span class="opt-desc${over ? ' sim-warn' : ''}">全角${Math.ceil(widthOf(text) / 2)}文字${over ? `（上限の${AD_LIMIT[kind] / 2}文字を超えています）` : ''}</span>` : ''}${h.own && h.ng.length ? `<span class="opt-desc sim-warn">⚠️ 「${esc(h.ng.join('」「'))}」は審査で止まるおそれがあります</span>` : ''}</span>${del}</label>`;
-    }).join('')}</div>`;
-    return `<h4 class="sim-adhead" id="sim-hl-list">見出し <small class="sim-hint">（最大${C.headlineMax}つ・${s.headlines.length}/${C.headlineMax}）</small></h4>
-      ${box(s.hls, s.headlines, C.headlineMax, 'hl', 'headline')}
-      ${form}
-      ${s.descs.length ? `<h4 class="sim-adhead">説明文 <small class="sim-hint">（最大${C.descriptionMax}つ・${s.descriptions.length}/${C.descriptionMax}）</small></h4>
-      ${box(s.descs, s.descriptions, C.descriptionMax, 'ds', 'description')}` : ''}`;
+    return Object.keys(AD_KIND).map(kind => renderAdKind(s, mode, kind)).join('');
+  }
+  function renderAdKind(s, mode, kind) {
+    const K = AD_KIND[kind], list = s[K.list], sel = s[K.sel], max = K.max(), min = K.min(), ed = st.adEdit;
+    const counter = (id, text) => { const c = countText(text, kind); return `<span class="sim-ad-count ${c.over ? 'over' : ''}" id="${id}-count">${esc(c.text)}</span>`; };
+    const rows = list.map((h, i) => {
+      const text = fill(h.text), id = `sim-ad-${mode}-${kind}-${i}`;
+      if (ed && ed.mode === mode && ed.kind === kind && ed.i === i) {
+        return `<li class="sim-ad-row editing">
+          <input type="text" id="sim-ad-edit" class="sim-text" data-adcount="${kind}" data-adsave="1" value="${esc(text)}" aria-label="${K.label}を書き換える">
+          <div class="sim-ad-editbar">${counter('sim-ad-edit', text)}
+            <span class="sim-ad-tools"><button type="button" class="btn-ghost sm" data-action="sim-ad-cancel">キャンセル</button><button type="button" class="btn-primary sm" data-action="sim-ad-save" data-for="sim-ad-edit" ${countText(text, kind).over ? 'disabled' : ''}>保存</button></span></div>
+          <p class="sim-alert bad" id="sim-ad-edit-err" role="alert" hidden></p>
+        </li>`;
+      }
+      const on = sel.includes(i), c = countText(text, kind);
+      const tag = h.own ? (h.edited ? '書き換え' : '自作') : h.ai ? 'AI' : '';
+      const at = mode === 'ops' ? `data-opsf="${K.attr}"` : `data-${K.attr}="${i}"`;
+      return `<li class="sim-ad-row ${on ? 'on' : ''}">
+        <label class="sim-ad-check" for="${id}"><input type="checkbox" id="${id}" value="${i}" ${at} ${on ? 'checked' : ''} ${!on && (sel.length >= max || c.over) ? 'disabled' : ''}>
+          <span class="sim-ad-text">${tag ? `<span class="tag">${tag}</span> ` : ''}${esc(text)}</span></label>
+        <div class="sim-ad-meta">
+          <span class="sim-ad-count ${c.over ? 'over' : ''}">${c.over ? `⚠️ ${esc(c.text)}。このままでは使えないので、編集して短くしましょう` : `全角${widthOf(text) / 2}文字`}</span>
+          ${h.own && h.ng && h.ng.length ? `<span class="sim-warn">⚠️ 「${esc(h.ng.join('」「'))}」は審査で止まるおそれがあります</span>` : ''}
+          <span class="sim-ad-tools"><button type="button" class="btn-ghost sm" data-action="sim-ad-edit" data-mode="${mode}" data-kind="${kind}" data-i="${i}">編集</button><button type="button" class="btn-ghost sm sim-ad-del" data-action="sim-ad-del" data-mode="${mode}" data-kind="${kind}" data-i="${i}">削除</button></span>
+        </div>
+      </li>`;
+    }).join('');
+    const newId = `sim-ad-new-${mode}-${kind}`;
+    const ph = kind === 'headline' ? `例：${areaWord()}駅すぐの${tplWords().main}` : `例：${areaWord()}駅から徒歩3分。${tplWords().act}はWEBで24時間受け付けています。`;
+    return `<div class="sim-ad-kind" ${kind === 'headline' ? 'id="sim-hl-list"' : ''}>
+      <h4 class="sim-adhead">${K.label} <small class="sim-hint">広告に使う <b class="${sel.length < min ? 'sim-warn' : ''}">${sel.length}</b> / ${max}個（${min}個以上）</small></h4>
+      ${list.length ? `<ul class="sim-ad-list">${rows}</ul>` : `<p class="sim-hint">${s.adSource === 'ai' ? 'AIの回答を取り込むと、ここに候補が出ます。' : ''}自分で追加することもできます。</p>`}
+      <div class="ckw sim-ad-new">
+        <label class="sim-label" for="${newId}">${K.label}を追加</label>
+        <div class="ckw-form"><input type="text" id="${newId}" class="sim-text" data-adcount="${kind}" data-adnew="${mode}" placeholder="${esc(ph)}"><button type="button" class="btn-ghost" data-action="sim-ad-add" data-mode="${mode}" data-kind="${kind}" data-for="${newId}">追加</button></div>
+        ${counter(newId, '')}
+        <p class="sim-alert bad" id="sim-ad-err-${mode}-${kind}" role="alert" hidden></p>
+      </div>
+    </div>`;
+  }
+  // 入力中の残り文字数（超えたら赤くして、保存・追加のボタンを押せなくする）
+  function updateAdCounter(input) {
+    const c = countText(normSp(input.value), input.dataset.adcount);
+    const el = $(`#${input.id}-count`), btn = $(`[data-for="${input.id}"]`);
+    if (el) { el.textContent = c.text; el.classList.toggle('over', c.over); }
+    if (btn) btn.disabled = c.over;
+  }
+  // 前のバージョンで保存した設定には、説明文の候補がないことがある
+  function ensureAds(s) {
+    if (!s || s.media === 'meta') return;
+    s.hls = s.hls || [];
+    s.descs = s.descs || [];
+    s.headlines = s.headlines || [];
+    s.descriptions = s.descriptions || [];
+    if (!s.descs.length && s.adSource !== 'ai') s.descs = clone(C.descriptions[s.industry] || C.commonDescriptions);
   }
 
   /* ---------- Meta：オーディエンス設定の画面 ---------- */
@@ -1460,24 +1546,10 @@
     return { title: '入札戦略', level, choice, best, reason };
   }
 
-  function gradeHeadlines() {
-    if (st.setup.adSource === 'ai' || adItems().some(h => h.own)) return gradeAiAds();
-    const hs = st.setup.headlines.map(i => hlList()[i]);
-    const themes = [...new Set(addedIdx().map(i => kwList()[i].theme).filter(Boolean))];
-    const covered = themes.filter(t => hs.some(h => h.quality === 'high' && h.themes.includes(t)));
-    const miss = themes.filter(t => !covered.includes(t));
-    const vio = hs.filter(h => h.quality === 'violation');
-    const level = vio.length ? 'bad' : !themes.length ? 'ok'
-      : covered.length === themes.length ? 'good' : covered.length >= themes.length / 2 ? 'ok' : 'bad';
-    const lines = hs.map(h => `・${fill(h.text)}：${h.reason}`);
-    if (miss.length) lines.push(`使うキーワードのうち「${miss.map(t => C.themeLabels[t] || t).join('」「')}」に合う見出しがありません。そのキーワードは品質が下がり、クリック単価が上がります。`);
-    if (vio.length) lines.push('問題のある表現を含む見出しがあるため、すべてのキーワードで品質が1段階下がる計算にしています。');
-    const bestHs = hlList().filter(h => h.quality === 'high' && h.themes.some(t => themes.includes(t)));
-    return { title: '広告見出し', level, choice: hs.map(h => fill(h.text)).join('／'), best: bestHs.map(h => fill(h.text)).join('／') || '使うキーワードに合う見出し', reason: lines.join('\n') };
-  }
+  const gradeHeadlines = () => gradeAds();
 
-  // AIの広告文：使うキーワードそれぞれに、AIが「良い」とした文で合うものがあるか
-  function gradeAiAds() {
+  // 広告文：使うキーワードそれぞれに、評価「良い」の文で合うものがあるか（用意した文はテーマ、AI・自作の文は言葉で判定）
+  function gradeAds() {
     const s = st.setup, hs = adItems();
     const adds = addedIdx().map(i => kwList()[i]).filter(c => !isTermKw(c));
     const covered = adds.filter(c => hs.some(h => h.quality === 'high' && adMatches(h, c)));
@@ -1486,13 +1558,13 @@
     const level = vio.length ? 'bad' : !adds.length ? 'ok'
       : covered.length === adds.length ? 'good' : covered.length >= adds.length / 2 ? 'ok' : 'bad';
     const kindOf = h => s.descs.includes(h) ? '説明文' : '見出し';
-    const lines = hs.map(h => `・【${kindOf(h)}${h.own ? '・自作' : ''}】${fill(h.text)}：${h.own ? ownReason(h) : h.reason}`);
+    const lines = hs.map(h => `・【${kindOf(h)}${h.own ? (h.edited ? '・書き換え' : '・自作') : ''}】${fill(h.text)}：${h.own ? ownReason(h) : h.reason}`);
     if (miss.length) lines.push(`使うキーワードのうち「${miss.map(c => fill(c.kw)).join('」「')}」に合う見出し・説明文がありません。そのキーワードは品質が下がり、クリック単価が上がります。`);
     if (vio.length) lines.push('問題のある表現を含む文があるため、すべてのキーワードで品質が1段階下がる計算にしています。');
     if (st.setup.adSource === 'ai') lines.push('AIが付けた評価（良い・普通・違反）と、文中の言葉・「合うキーワード」をもとに採点しています。AIの評価が正しいとは限らないので、自分でも考えてみましょう。');
-    if (hs.some(h => h.own)) lines.push('自作の見出しは、使うキーワードの言葉が入っているか、根拠のない表現がないかで採点しています。');
-    const best = [...s.hls, ...s.descs].filter(h => h.quality === 'high' && adds.some(c => adMatches(h, c)));
-    return { title: s.descs.length ? '広告文（見出し・説明文）' : '広告見出し', level, choice: hs.map(h => fill(h.text)).join('／'),
+    if (hs.some(h => h.own)) lines.push('自作・書き換えた文は、使うキーワードの言葉が入っているか、根拠のない表現がないかで採点しています。');
+    const best = [...s.hls, ...s.descs].filter(h => h.quality === 'high' && adds.some(c => adMatches(h, c)) && widthOf(fill(h.text)) <= AD_LIMIT[s.descs.includes(h) ? 'description' : 'headline']);
+    return { title: '広告文（見出し・説明文）', level, choice: hs.map(h => fill(h.text)).join('／'),
       best: best.map(h => fill(h.text)).join('／') || '使うキーワードの言葉が入った、評価「良い」の文', reason: lines.join('\n') };
   }
 
@@ -2141,6 +2213,9 @@
   const needsCv = b => !!B.bidding[b].needsConversion;
   const CREATIVE_UP = { none: 'image', image: 'video' };
 
+  // 広告に使っている文（番号ではなく文章で比べる。運用改善で書き換え・削除すると番号がずれるため）
+  const adTexts = (s, kind) => JSON.stringify(((s[AD_KIND[kind].sel]) || []).map(i => ((s[AD_KIND[kind].list] || [])[i] || {}).text));
+
   /* ---------- 前月からの変更点 ---------- */
   function changesList(b, a) {
     const out = [];
@@ -2158,8 +2233,8 @@
         else if (x.act !== 'add' && x.act !== 'paused' && y.act === 'add') out.push(`「${t}」を追加（${B.match[y.match].label}）`);
         else if (x.act === 'add' && y.act === 'add' && x.match !== y.match) out.push(`「${t}」を${B.match[x.match].label}→${B.match[y.match].label}`);
       });
-      if (JSON.stringify(b.setup.headlines) !== JSON.stringify(a.setup.headlines)) out.push('広告見出しを変更');
-      if (JSON.stringify(b.setup.descriptions || []) !== JSON.stringify(a.setup.descriptions || [])) out.push('説明文を変更');
+      if (adTexts(b.setup, 'headline') !== adTexts(a.setup, 'headline')) out.push('広告見出しを変更');
+      if (adTexts(b.setup, 'description') !== adTexts(a.setup, 'description')) out.push('説明文を変更');
       if (b.setup.area !== a.setup.area) out.push(`配信地域：${(geoOptions().find(o => o.value === a.setup.area) || {}).label}`);
       if (b.setup.bidding !== a.setup.bidding) out.push(`入札戦略：${B.bidding[b.setup.bidding].label}→${B.bidding[a.setup.bidding].label}`);
       if (a.setup.bidding === 'manual' && b.setup.bidding === 'manual' && b.setup.bid !== a.setup.bid) out.push(`入札額：${yen(b.setup.bid)}→${yen(a.setup.bid)}`);
@@ -2287,7 +2362,7 @@
     // 見出し（品質）
     const qScore = st0 => withState(st0.setup, st0.karte, () => addedIdx().map(i => kwList()[i]).filter(c => !isTermKw(c)).reduce((s, c) => s + ({ high: 2, mid: 1, low: 0 })[kwQuality(c)], 0) / Math.max(1, addedIdx().length));
     const qb = qScore(b), qa = qScore(a);
-    if (JSON.stringify([b.setup.headlines, b.setup.descriptions]) !== JSON.stringify([a.setup.headlines, a.setup.descriptions])) {
+    if (adTexts(b.setup, 'headline') + adTexts(b.setup, 'description') !== adTexts(a.setup, 'headline') + adTexts(a.setup, 'description')) {
       if (qa > qb + 0.05) add('good', '広告見出しを改善しました', 'キーワードに合う見出しが増えたので、品質が上がり、クリック率が上がってクリック単価が下がります。');
       else if (qa < qb - 0.05) add('bad', '広告見出しの品質が下がりました', 'キーワードと合わない見出しに変わったため、クリック単価が上がります。');
     }
@@ -2354,6 +2429,7 @@
     const h = lastMonth(), d = st.ops.draft, isMeta = h.res.media === 'meta';
     const next = h.month + 1;
     const changes = changesList({ setup: st.setup, karte: st.karte }, d);
+    const adMiss = isMeta ? [] : adShort(d.setup);
     return `
       <p class="lead">${h.month}ヶ月目の結果${isMeta ? '' : 'と検索語句レポート'}を見て、${next}ヶ月目に向けた改善をしましょう。変更は「${next}ヶ月目を配信する」を押したときに反映されます。</p>
       ${verdictBox(h)}
@@ -2369,7 +2445,8 @@
       ${renderImproveCommon(d, isMeta)}
       <div class="sim-submit">
         <p class="sim-rest">${changes.length ? `変更：<b class="sim-changes">${changes.length}件</b>` : '変更なし（このまま配信）'}</p>
-        <button type="button" class="btn-primary" data-action="sim-run-month">${next}ヶ月目を配信する →</button>
+        ${adMiss.length ? `<p class="sim-rest">広告文が足りません：<b>${esc(adMiss.join('・'))}</b></p>` : ''}
+        <button type="button" class="btn-primary" data-action="sim-run-month" ${adMiss.length ? 'disabled' : ''}>${next}ヶ月目を配信する →</button>
       </div>`;
   }
 
@@ -2715,6 +2792,8 @@
     st.adSource = null;
     st.ai = blankAi();
     st.aiFlow = blankFlow();
+    st.help = { act: null, match: null };
+    st.adEdit = null;
     st.saved = loadCase();
     st.dirty = false;
     render();
@@ -2727,10 +2806,15 @@
   window.addEventListener('pagehide', saveNow);
 
   view.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.target.dataset.hlmode && !e.isComposing) {
+    if (e.key === 'Enter' && e.target.dataset.adnew && !e.isComposing) {
       e.preventDefault();
-      addHeadline(e.target.dataset.hlmode);
+      addAd(e.target.dataset.adnew, e.target.dataset.adcount);
     }
+    if (e.key === 'Enter' && e.target.dataset.adsave && !e.isComposing) {
+      e.preventDefault();
+      saveAdEdit();
+    }
+    if (e.key === 'Escape' && e.target.dataset.adsave) { st.adEdit = null; renderKeep(); }
     if (e.key === 'Enter' && e.target.id === 'sim-neg-text' && !e.isComposing) {
       e.preventDefault();
       addNegative();
@@ -2837,21 +2921,31 @@
         const sel = st.setup.kw[Number(t.dataset.i)];
         sel.act = t.dataset.val;
         if (sel.act !== 'add') sel.match = null;
+        if (t.closest('.sim-mcard')) st.help.act = null; // 説明のカードから選んだら、説明は閉じる
+        if (sel.act !== 'add' && st.help.match === Number(t.dataset.i)) st.help.match = null;
         renderKeep();
         break;
       }
       case 'sim-match':
         st.setup.kw[Number(t.dataset.i)].match = t.dataset.val;
+        if (t.closest('.sim-mcard')) st.help.match = null;
         renderKeep();
         break;
-      case 'sim-hl-add': addHeadline(t.dataset.mode); break;
-      case 'sim-hl-remove': e.preventDefault(); removeHeadline(Number(t.dataset.i)); break;
-      case 'sim-match-help': {
-        const i = Number(t.dataset.i);
-        st.matchHelp = st.matchHelp === i ? null : i;
+      case 'sim-help-toggle': {
+        const i = Number(t.dataset.i), k = t.dataset.kind;
+        st.help[k] = st.help[k] === i ? null : i;
         renderKeep();
         break;
       }
+      case 'sim-ad-add': addAd(t.dataset.mode, t.dataset.kind); break;
+      case 'sim-ad-edit':
+        st.adEdit = { mode: t.dataset.mode, kind: t.dataset.kind, i: Number(t.dataset.i) };
+        renderKeep();
+        { const el = $('#sim-ad-edit'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+        break;
+      case 'sim-ad-save': saveAdEdit(); break;
+      case 'sim-ad-cancel': st.adEdit = null; renderKeep(); break;
+      case 'sim-ad-del': removeAd(t.dataset.mode, t.dataset.kind, Number(t.dataset.i)); break;
       case 'sim-neg-add': addNegative(); break;
       case 'sim-neg-remove':
         st.setup.customNeg.splice(Number(t.dataset.i), 1);
@@ -2898,6 +2992,7 @@
         break;
       }
       case 'sim-run-month':
+        if (st.karte.media !== 'meta' && adShort(st.ops.draft.setup).length) return;
         runNextMonth();
         st.phase = 'monthResult';
         render();
@@ -3071,6 +3166,10 @@
       st.dirty = true;
       refreshAiHint('menus');
       updateMenuCheck();
+      return;
+    }
+    if (e.target.dataset.adcount) {
+      updateAdCounter(e.target);
       return;
     }
     if (e.target.dataset.aipaste) {
