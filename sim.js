@@ -102,6 +102,7 @@
     // AIのパネルの状態（コピーしたか・貼り付け途中の文章・取り込みの結果）
     aiFlow: { kw: { copied: false, draft: '', msg: null }, ad: { copied: false, draft: '', msg: null }, terms: { copied: false, draft: '', msg: null } },
     saved: null,      // ブラウザに保存されている前回の続き（カルテ画面から再開できる）
+    mt: { open: null, trial: null }, // マッチタイプ体験：開いているキーワードの番号・試しているマッチタイプ
     dirty: false
   };
 
@@ -614,6 +615,7 @@
       meta: {}
     };
     setAds(st.adSource || 'auto');
+    st.mt = { open: null, trial: null };
   }
   // 広告文の候補（見出し hls・説明文 descs）を作り方に合わせて入れ替える。選択はリセット
   function setAds(adSource) {
@@ -1041,6 +1043,7 @@
     st.phase = !need || (need === 'setup' ? st.setup : st.ops) ? d.phase || 'karte' : 'karte';
     if (st.phase === 'result' && !st.seed) newSeed();
     st.saved = null;
+    st.mt = { open: null, trial: null };
     st.dirty = true;
     syncGoals();
     try { render(); } catch (e) { st.phase = 'karte'; st.setup = null; st.ops = null; render(); }
@@ -1184,6 +1187,7 @@
           ${Object.entries(B.intent).map(([i, x]) => `<dt>検索意図：${esc(x.label)}</dt><dd>クリック率 ×${x.ctr}・成約率 ×${x.cvr}</dd>`).join('')}
         </dl></details>
         ${s.source === 'ai' ? '<p class="sim-hint">🤖 AIの回答から取り込んだ候補です。意図・単価・検索数はAIの推測です。</p>' : s.source === 'template' ? '<p class="sim-hint">🧩 型から自動生成した候補です。</p>' : ''}
+        ${renderMatchGuide()}
         <ul class="kw-list" id="sim-kw-list">${list.map((c, i) => renderKwRow(c, i, scale)).join('')}</ul>
 
         <div class="ckw">
@@ -1234,8 +1238,145 @@
         <span class="seg" role="group" aria-label="${esc(text)}の扱い">${['add', 'negative', 'skip'].map(a => `<button type="button" class="seg-btn seg-${a} ${sel.act === a ? 'on' : ''}" aria-pressed="${sel.act === a}" data-action="sim-kw" data-i="${i}" data-val="${a}">${ACT_LABEL[a]}</button>`).join('')}</span></div>
       <div class="sim-kwmeta">${meta}</div>
       ${sel.act === 'add' ? `<div class="sim-match"><span class="seg" role="group" aria-label="マッチタイプ">${Object.keys(B.match).map(m => `<button type="button" class="seg-btn ${sel.match === m ? 'on seg-add' : ''}" aria-pressed="${sel.match === m}" data-action="sim-match" data-i="${i}" data-val="${m}">${esc(B.match[m].label)}</button>`).join('')}</span>
-        ${sel.match ? `<code class="sim-mcode">${esc(MATCH_CODE[sel.match](text))}</code>` : '<span class="sim-req">マッチタイプを選んでください</span>'}</div>` : ''}
+        ${sel.match ? `<code class="sim-mcode">${esc(MATCH_CODE[sel.match](text))}</code>` : '<span class="sim-req">マッチタイプを選んでください</span>'}
+        ${isTermKw(c) ? '' : `<button type="button" class="btn-ghost sm sim-mt-btn" data-action="sim-mt-open" data-i="${i}" aria-expanded="${st.mt.open === i}">🔬 マッチタイプ体験</button>`}</div>
+        ${st.mt.open === i && !isTermKw(c) ? renderMatchLab(c, i) : ''}` : ''}
     </li>`;
+  }
+
+  /* ---------- マッチタイプ体験 ----------
+   * キーワードを言葉に分けて「ありそうな検索語句」を作り、マッチタイプごとに表示されるかを見せる。
+   * 完全一致：同じ意味・表記ゆれ・語順違い（今のGoogle広告の「類似パターン」）
+   * フレーズ一致：完全一致の分＋キーワードの言葉をすべて含む検索
+   * 部分一致：関連する検索まで、すべて
+   */
+  const MT_TYPES = {
+    same:       { label: '同じ意味',   rel: true },
+    variant:    { label: '表記ゆれ',   rel: true },
+    order:      { label: '語順違い',   rel: true },
+    added:      { label: '語句追加',   rel: true },
+    related:    { label: '関連語',     rel: true },
+    irrelevant: { label: '関係ない',   rel: false },
+    negative:   { label: '除外すべき', rel: false }
+  };
+  const MT_DESC = {
+    exact:  '同じ意味の検索だけに表示。狙いが絞れるが、表示は少ない',
+    phrase: 'キーワードの意味を含む検索に表示。表示の多さと無駄のバランス型',
+    broad:  '関連する検索まで広く表示。表示は多いが無駄も増える。除外キーワードが必須'
+  };
+  const kwTokens = c => normSp(fill(c.kw)).split(' ').filter(Boolean);
+  function mtQueries(c) {
+    const toks = kwTokens(c), kw = toks.join(' '), area = areaWord();
+    const core = toks.filter(t => t !== area), main = core.slice().sort((a, b) => b.length - a.length)[0] || kw;
+    const out = [], add = (q, type) => { q = normSp(q); if (q && !out.some(x => x.q === q)) out.push({ q, type }); };
+    const L = C.matchLab, terms = searchTermsOf();
+    add(kw, 'same');
+    // 同じ意味の言い換え（辞書の言葉を1つ置き換える）
+    for (const pair of L.synonyms) {
+      const j = toks.findIndex(t => pair.includes(t));
+      if (j >= 0) { add(toks.map((t, k) => k === j ? pair.find(x => x !== t) : t).join(' '), 'same'); break; }
+    }
+    if (toks.length > 1) add(toks.join(''), 'variant');
+    else { const hira = kw.replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60)); if (hira !== kw) add(hira, 'variant'); }
+    if (toks.length > 1) add([toks[1], toks[0], ...toks.slice(2)].join(' '), 'order');
+    // 地域型でない業種には「近く」などの地域の言葉を付けない
+    const mods = (terms.variants || []).filter(v => !kw.includes(v) && (B.industries[st.karte.industry].local || !/近く|駅|近い/.test(v)));
+    mods.slice(0, 2).forEach(v => add(`${kw} ${v}`, 'added'));
+    const rel = (L.related[st.karte.industry] || []).filter(r => !r.split(' ').some(w => toks.includes(w)));
+    rel.slice(0, 2).forEach(r => add(toks.includes(area) ? `${area} ${r}` : r, 'related'));
+    const other = ((terms.groups || {}).other || []).map(x => fill(x.q))[0];
+    add(other && toks.some(t => other.includes(t)) ? other : `${main} 意味`, 'irrelevant');
+    const job = ((negGroups().find(g => g.id === 'job') || {}).words || ['求人'])[0];
+    const diy = ((negGroups().find(g => g.id === 'diy') || {}).words || ['自分で'])[0];
+    add(`${kw} ${job}`, 'negative');
+    add(`${main} ${diy}`, 'negative');
+    // 8個に足りなければ、語句追加を増やす
+    mods.slice(2).forEach(v => { if (out.length < 8) add(`${kw} ${v}`, 'added'); });
+    return out.slice(0, 10);
+  }
+  function mtShown(x, toks, match) {
+    if (['same', 'variant', 'order'].includes(x.type)) return true;
+    if (match === 'exact') return false;
+    if (match === 'broad') return true;
+    return x.type !== 'related' && toks.every(t => x.q.includes(t));
+  }
+  // 除外キーワードで防げる「関係ない検索」の割合（成果シミュレーションと同じ考え方）
+  function blockedShareNow() {
+    const negs = negativesOf(), blocked = blockedGroups();
+    return negGroups().reduce((a, g) => a + g.share * (blocked.has(g.id) ? 1 : groupBlockFrac(g, negs)), 0);
+  }
+
+  // 案件カルテから、おすすめのマッチタイプを理由つきで出す
+  function matchGuide() {
+    const k = st.karte, s = st.setup, bench = benchOf(k);
+    const cv = numOf('monthlyCv', k.monthlyCv) || 0, need = B.autoBidLearning.monthlyConversions;
+    const dailyClicks = k.budget / B.budget.daysPerMonth / bench.cpc;
+    const small = dailyClicks < B.budget.minDailyClicks, noMeasure = k.measurement === 'none';
+    const auto = !s.bidding || s.bidding === 'conversions' || s.bidding === 'targetCpa';
+    const reasons = [];
+    let rec;
+    if (noMeasure || small) {
+      rec = '完全一致・フレーズ一致を中心に';
+      if (noMeasure) reasons.push('成果を計測していないので、どの検索が成果につながったか分かりません。広く出す部分一致は、無駄な検索を見つけて止めることができないため向きません。');
+      if (small) reasons.push(`1日の予算で買えるクリックは約${dailyClicks.toFixed(1)}回です。予算が少ないうちは、関係ない検索に使う余裕がないので、狙いを絞りましょう。`);
+    } else if (k.measurement === 'full' && cv >= need) {
+      rec = '部分一致＋除外キーワードも検討できます';
+      reasons.push(`計測ができていて、月${need}件以上のコンバージョンがあります。自動入札が「成果につながる検索」を学習できるので、部分一致で検索を広げても無駄を抑えやすい状態です。`);
+      reasons.push(auto ? '部分一致を使うときは、除外キーワードと検索語句レポートの確認をセットで行いましょう。' : '部分一致は、自動入札（コンバージョン数の最大化・目標CPA）と組み合わせるのが前提です。手動入札・クリック数の最大化のままなら、フレーズ一致中心が無難です。');
+    } else {
+      rec = 'フレーズ一致を中心に';
+      reasons.push(k.measurement === 'partial' ? '計測が一部だけなので、成果の判断がずれやすい状態です。広げすぎず、フレーズ一致で様子を見ましょう。' : `計測はできていますが、月のコンバージョンが${need}件未満なので、自動入札の学習データはまだ少なめです。`);
+    }
+    if (k.history === 'first') reasons.push('広告が初めてなら、まずフレーズ一致から始めて、1ヶ月目の検索語句レポートを見ながら「除外する・完全一致にする・部分一致に広げる」を調整するのが定番です。');
+    if (k.history === 'bad') reasons.push('前回うまくいかなかった原因が「関係ない検索への表示」なら、マッチタイプを絞って除外キーワードを先に入れておきましょう。');
+    return { rec, reasons };
+  }
+  function renderMatchGuide() {
+    const g = matchGuide();
+    return `<div class="sim-mt-guide">
+      <p><b>🧭 マッチタイプの選び方ガイド（この案件の場合）</b>：<span class="sim-mt-rec">${esc(g.rec)}</span></p>
+      <ul>${g.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+      <p class="sim-hint">採点は、キーワードごとの「おすすめのマッチタイプ」で行います。迷ったら各キーワードの「🔬 マッチタイプ体験」で、どんな検索に表示されるかを確かめましょう。</p>
+    </div>`;
+  }
+
+  function renderMatchLab(c, i) {
+    const s = st.setup, trial = st.mt.trial || s.kw[i].match || 'phrase', toks = kwTokens(c), kw = toks.join(' ');
+    const negs = negativesOf(), qs = mtQueries(c), bs = blockedShareNow();
+    const vol = c.volume * B.area[st.karte.area].searchScale;
+    const stat = m => ({ imp: vol * B.match[m].reach, irr: B.match[m].irrelevant * (1 - bs), cpc: c.cpc * B.match[m].cpc });
+    const all = Object.keys(B.match).map(stat), now = stat(trial);
+    const max = { imp: Math.max(...all.map(x => x.imp)), irr: Math.max(...all.map(x => x.irr), 0.01), cpc: Math.max(...all.map(x => x.cpc)) };
+    const bar = (label, v, mx, text, cls) => `<div class="sim-mt-bar"><span>${label}</span><div class="sim-bar ${cls || ''}"><i style="width:${Math.max(3, Math.round(v / mx * 100))}%"></i></div><b>${text}</b></div>`;
+    const rows = qs.map(x => {
+      const shown = mtShown(x, toks, trial), blocked = negs.some(n => tokensIn(n.text, x.q)), t = MT_TYPES[x.type];
+      const extra = x.q.split(' ').filter(w => !toks.includes(w)).join(' ') || x.q;
+      const state = blocked ? 'blocked' : shown ? 'on' : 'off';
+      return `<li class="sim-mt-q ${state} ${t.rel ? 'rel' : 'irr'}">
+        <span class="sim-mt-tag">${esc(t.label)}</span><span class="sim-mt-text">${esc(x.q)}</span>
+        <span class="sim-mt-state">${blocked ? '🚫 除外済み' : shown ? (t.rel ? '✅ 表示される' : '⚠️ 表示される（無駄）') : '— 表示されない'}</span>
+        ${!t.rel && !blocked ? `<button type="button" class="btn-ghost sm" data-action="sim-mt-neg" data-q="${esc(extra)}">「${esc(extra)}」を除外に追加</button>` : ''}
+      </li>`;
+    }).join('');
+    const shownN = qs.filter(x => mtShown(x, toks, trial) && !negs.some(n => tokensIn(n.text, x.q))).length;
+    const wasteN = qs.filter(x => !MT_TYPES[x.type].rel && mtShown(x, toks, trial) && !negs.some(n => tokensIn(n.text, x.q))).length;
+    return `<div class="sim-mt" id="sim-mt-${i}">
+      <div class="sim-mt-head"><b>🔬 マッチタイプ体験：「${esc(kw)}」</b><button type="button" class="x" data-action="sim-mt-open" data-i="${i}" aria-label="マッチタイプ体験を閉じる">×</button></div>
+      <span class="seg" role="group" aria-label="体験するマッチタイプ">${Object.keys(B.match).map(m => `<button type="button" class="seg-btn ${trial === m ? 'on seg-add' : ''}" aria-pressed="${trial === m}" data-action="sim-mt-trial" data-val="${m}">${esc(B.match[m].label)}<code>${esc(MATCH_CODE[m]('…'))}</code></button>`).join('')}</span>
+      <ul class="sim-mt-desc">${Object.keys(B.match).map(m => `<li class="${trial === m ? 'on' : ''}"><b>${esc(B.match[m].label)}</b>：${esc(MT_DESC[m])}</li>`).join('')}</ul>
+      <p class="sim-hint">※ 今のGoogle広告では、完全一致でも表記ゆれや同じ意味の言い換え（語順違いを含む）の検索には表示されます。</p>
+      <div class="sim-mt-bars">
+        ${bar('表示回数の目安', now.imp, max.imp, `月約${fmt(now.imp)}回`)}
+        ${bar('関係ない検索の割合', now.irr, max.irr, `約${Math.round(now.irr * 100)}%`, now.irr > 0.15 ? 'over' : '')}
+        ${bar('CPCの目安', now.cpc, max.cpc, `約${yen(now.cpc)}`)}
+      </div>
+      <p class="sim-hint">関係ない検索の割合は、今の除外キーワード（関係ない検索の約${Math.round(bs * 100)}%を防げる）を反映した目安です。品質・入札戦略による変化は含みません。</p>
+      <p class="sim-mt-count">この一覧のうち表示される検索：<b>${shownN} / ${qs.length}</b>（うち無駄な検索 <b class="${wasteN ? 'sim-warn' : ''}">${wasteN}</b>）</p>
+      <ul class="sim-mt-list">${rows}</ul>
+      <div class="end-actions sim-mt-actions">
+        ${s.kw[i].match === trial ? `<span class="sim-hint">いまの設定：${esc(B.match[trial].label)}</span>` : `<button type="button" class="btn-primary sm" data-action="sim-mt-apply" data-i="${i}" data-val="${trial}">このキーワードを「${esc(B.match[trial].label)}」にする</button>`}
+      </div>
+    </div>`;
   }
 
   // 見出し・説明文のチェックボックス（設定の画面：mode='setup'／運用改善：mode='ops'）
@@ -2607,6 +2748,7 @@
     st.adSource = null;
     st.ai = blankAi();
     st.aiFlow = blankFlow();
+    st.mt = { open: null, trial: null };
     st.saved = loadCase();
     st.dirty = false;
     render();
@@ -2724,7 +2866,7 @@
       case 'sim-kw': {
         const sel = st.setup.kw[Number(t.dataset.i)];
         sel.act = t.dataset.val;
-        if (sel.act !== 'add') sel.match = null;
+        if (sel.act !== 'add') { sel.match = null; if (st.mt.open === Number(t.dataset.i)) st.mt = { open: null, trial: null }; }
         renderKeep();
         break;
       }
@@ -2732,6 +2874,26 @@
         st.setup.kw[Number(t.dataset.i)].match = t.dataset.val;
         renderKeep();
         break;
+      case 'sim-mt-open': {
+        const i = Number(t.dataset.i);
+        st.mt = st.mt.open === i ? { open: null, trial: null } : { open: i, trial: st.setup.kw[i].match || 'phrase' };
+        renderKeep();
+        break;
+      }
+      case 'sim-mt-trial':
+        st.mt.trial = t.dataset.val;
+        renderKeep();
+        break;
+      case 'sim-mt-apply':
+        st.setup.kw[Number(t.dataset.i)].match = t.dataset.val;
+        renderKeep();
+        break;
+      case 'sim-mt-neg': {
+        const q = t.dataset.q;
+        if (q && !st.setup.customNeg.includes(q)) st.setup.customNeg.push(q);
+        renderKeep();
+        break;
+      }
       case 'sim-neg-add': addNegative(); break;
       case 'sim-neg-remove':
         st.setup.customNeg.splice(Number(t.dataset.i), 1);
