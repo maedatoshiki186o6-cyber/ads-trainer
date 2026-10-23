@@ -777,34 +777,17 @@
   .sim-kwmeta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 12px; color: var(--muted); }
   .sim-kwm b { color: var(--text); font-weight: 500; }
   .sim-kwm b.sim-int-high { color: var(--good); } .sim-kwm b.sim-int-low { color: var(--bad); }
-  /* マッチタイプ体験・選び方ガイド */
-  .sim-mt-guide { margin: 0 0 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); font-size: 14px; }
-  .sim-mt-guide p { margin: 0; }
-  .sim-mt-guide ul { margin: 6px 0 8px; padding-left: 1.2em; }
-  .sim-mt-guide li { margin: 2px 0; }
-  .sim-mt-guide .sim-hint { margin: 0; }
-  .sim-mt-rec { color: var(--good); font-weight: 600; }
-  .sim-mt-btn { margin-left: auto; }
-  .sim-mt { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-  .sim-mt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 14px; }
-  .sim-mt .seg-btn code { margin-left: 4px; font-size: 11px; opacity: .7; }
-  .sim-mt-desc { margin: 10px 0 4px; padding-left: 1.2em; font-size: 13px; color: var(--muted); }
-  .sim-mt-desc li.on { color: var(--text); }
-  .sim-mt-bars { display: grid; gap: 6px; margin: 10px 0 4px; }
-  .sim-mt-bar { display: grid; grid-template-columns: 9em 1fr 6.5em; align-items: center; gap: 8px; font-size: 13px; }
-  .sim-mt-bar b { text-align: right; font-weight: 500; }
-  .sim-mt-count { margin: 10px 0 6px; font-size: 13px; }
-  .sim-mt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-  .sim-mt-q { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 6px 10px; border-radius: 8px; font-size: 13px; border: 1px solid transparent; }
-  .sim-mt-q.on.rel { background: var(--good-soft); border-color: var(--good); }
-  .sim-mt-q.on.irr { background: var(--bad-soft); border-color: var(--bad); }
-  .sim-mt-q.off { opacity: .5; }
-  .sim-mt-q.blocked .sim-mt-text { text-decoration: line-through; color: var(--muted); }
-  .sim-mt-tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
-  .sim-mt-text { flex: 1; min-width: 8em; font-weight: 500; }
-  .sim-mt-state { font-size: 12px; white-space: nowrap; }
-  .sim-mt-actions { margin-top: 10px; justify-content: flex-end; }
-  @media (max-width: 480px) { .sim-mt-bar { grid-template-columns: 7em 1fr 5.5em; font-size: 12px; } }
+  /* マッチタイプの選択肢（意味・例・こんなとき） */
+  .sim-match-cards { display: block; }
+  .sim-match-label { margin: 0 0 6px; font-size: 13px; }
+  .sim-mcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .sim-mcard { display: grid; gap: 4px; align-content: start; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; }
+  .sim-mcard:hover { border-color: var(--good); }
+  .sim-mcard.on { border: 2px solid var(--good); background: var(--good-soft); padding: 9px 11px; }
+  .sim-mcard-title { font-size: 14px; font-weight: 600; }
+  .sim-mcard-title small { margin-left: 4px; font-weight: 400; color: var(--muted); }
+  .sim-mcard b { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+  @media (max-width: 640px) { .sim-mcards { grid-template-columns: 1fr; } }
   .sim-match { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
   .sim-mcode { font-size: 13px; font-weight: 700; background: var(--good-soft); color: var(--good); border-radius: 4px; padding: 1px 8px; }
   .field-head h3 small.sim-hint { font-weight: 400; margin: 0; }
