@@ -746,9 +746,21 @@
   .sim-alert.sim-good { background: var(--good-soft); color: var(--good); }
   /* キーワード候補の作り方：AIの回答を取り込む */
   .sim-ai { margin-top: 12px; }
-  .sim-ai-steps { margin: 12px 0 0; padding-left: 1.4em; display: grid; gap: 14px; }
-  .sim-ai-steps > li > b { display: block; margin-bottom: 6px; }
-  .sim-ai-steps .sim-hint { margin: 0 0 8px; }
+  .sim-ai-copyrow { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+  .sim-ai-copyrow .sim-hint { margin: 0; }
+  .sim-ai-steps { margin: 12px 0 0; padding: 12px 14px 12px 2.2em; display: grid; gap: 8px; background: var(--surface-2); border-radius: var(--radius); font-size: 14px; }
+  .sim-ai-steps > li > b { margin-right: 8px; }
+  .sim-ai-steps .sim-hint { margin: 0; display: inline; }
+  .sim-ai-steps .btn-ghost { display: inline-block; margin-top: 4px; text-decoration: none; }
+  .sim-ai-pastelabel { display: block; margin-top: 14px; }
+  .sim-ai-done { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .sim-adhead { margin: 14px 0 6px; font-size: 14px; }
+  .sim-menus { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+  .sim-menus li { display: flex; align-items: center; gap: 6px; }
+  .sim-menus li > .sim-text { flex: 1; min-width: 0; }
+  .sim-menus .num-wrap { width: 9.5em; flex: none; flex-wrap: nowrap; gap: 4px; }
+  .sim-menus .num-wrap input { width: 100%; }
+  .sim-aihint { margin: 4px 0 0; color: var(--ok); }
   .sim-ai-preview { margin-top: 8px; font-size: 13px; }
   .sim-ai-preview summary { cursor: pointer; color: var(--muted); }
   .sim-ai-prompt { margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
@@ -759,7 +771,6 @@
   .sim-saved p { margin: 0; font-size: 14px; }
   .sim-saved small { margin-left: 8px; color: var(--muted); }
   .sim-saved .end-actions { margin-top: 10px; justify-content: flex-end; }
-  .sim-dock-ai { margin-top: 10px; }
   .sim-goal-strip { margin: 16px 0 4px; }
   .sim-guide { margin: 8px 0 12px; }
   .sim-guide code { font-size: 12px; background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
@@ -995,6 +1006,7 @@
 <!-- 実践シミュレーション（目安の数値 → 案件データ → 画面と計算） -->
 <script src="sim-benchmarks.js"></script>
 <script src="sim-cases.js"></script>
+<script src="sim-prompts.js"></script>
 <script src="sim.js"></script>
 <script>
 (function () {

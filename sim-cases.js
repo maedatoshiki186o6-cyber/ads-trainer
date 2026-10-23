@@ -40,6 +40,8 @@ window.SIM_CASES = {
 
   karteGroups: [
     { title: 'お店・商品について',   fields: ['industry', 'area', 'areaName', 'consideration', 'targetAge', 'targetGender'] },
+    { title: '事業の中身（AIの提案に使います）', fields: ['menus', 'notOffered', 'strengths', 'location', 'booking', 'painPoints', 'competitors'],
+      lead: 'キーワード・広告文・検索語句をAIに作ってもらうときに使います。どれも任意ですが、具体的に書くほどAIの提案が案件に合ったものになります。' },
     { title: '広告の目的と目標',     fields: ['goal', 'cvType', 'salesTarget', 'price', 'closeRate', 'margin', 'budget'], calc: true },
     { title: '計測とこれまでの実績', fields: ['measurement', 'monthlyCv', 'history'] },
     { title: '素材・LP・広告の決まり', fields: ['creative', 'lp', 'specialCategory'] },
@@ -201,6 +203,15 @@ window.SIM_CASES = {
       ]
     },
     areaName: { label: '地域名（任意）', type: 'text', rows: 1, placeholder: '例：新宿（キーワードや広告文に使います）' },
+    // 事業の中身（すべて任意。aiHint:true の項目は、未入力だと「入力するとAIの提案の精度が上がります」と表示）
+    menus: { label: '主力メニュー・商品（名前と価格）', type: 'menus', optional: true, aiHint: true,
+      hint: 'よく売れる・力を入れたいメニューを、名前と価格（税込）で入れてください。複数入力できます。' },
+    notOffered: { label: '提供していないメニュー', type: 'text', rows: 1, aiHint: true, placeholder: '例：矯正治療、訪問診療' },
+    strengths: { label: '強み・こだわり', type: 'text', aiHint: true, placeholder: '例：夜20時まで診療、痛みに配慮した麻酔、個室の診療室' },
+    location: { label: '店舗の場所（最寄り駅・エリア）', type: 'text', rows: 1, aiHint: true, placeholder: '例：新宿駅 西口から徒歩3分' },
+    booking: { label: '予約方法・当日対応の可否', type: 'text', rows: 1, aiHint: true, placeholder: '例：WEB予約24時間OK・電話予約・当日の急患も対応' },
+    painPoints: { label: 'お客さんの悩み・来店のきっかけ', type: 'text', aiHint: true, placeholder: '例：歯が痛くなって急いで探す／仕事帰りに通える歯医者を探している' },
+    competitors: { label: '競合・よく比較される店', type: 'text', rows: 1, aiHint: true, placeholder: '例：駅前の大型歯科チェーン、近くの〇〇歯科' },
     memo: { label: 'メモ（任意）', type: 'text', placeholder: '例：自費診療（インプラント）を増やしたい' }
   },
 
@@ -216,7 +227,12 @@ window.SIM_CASES = {
         goal: 'booking', cvType: 'lead', salesTarget: 320000, price: 20000, closeRate: 80, margin: 60, budget: 100000,
         measurement: 'full', monthlyCv: '10', history: 'good',
         creative: 'image', lp: 'dedicated', specialCategory: 'none',
-        memo: '一般診療の予約に加えて、単価の高いインプラント（自費診療）の相談も増やしたい。予約のうち約8割が実際に来院する。'
+        memo: '一般診療の予約に加えて、単価の高いインプラント（自費診療）の相談も増やしたい。予約のうち約8割が実際に来院する。',
+        menus: [{ name: '一般診療（虫歯・歯周病）', price: 5000 }, { name: 'インプラント', price: 400000 }, { name: '歯のクリーニング', price: 4000 }],
+        notOffered: '矯正治療、訪問診療', strengths: '平日は夜20時まで診療。痛みに配慮した麻酔。インプラントの無料カウンセリングあり。',
+        location: '新宿駅 西口から徒歩3分', booking: 'WEB予約（24時間）・電話予約。当日の急患も対応。',
+        painPoints: '急に歯が痛くなって近くで探す人、仕事帰りに通える歯医者を探している会社員が多い。',
+        competitors: '駅前の大型歯科チェーン'
       }
     },
     {
@@ -230,7 +246,12 @@ window.SIM_CASES = {
         goal: 'trial', cvType: 'lead', salesTarget: 600000, price: 200000, closeRate: 30, margin: 70, budget: 50000,
         measurement: 'none', monthlyCv: '0', history: 'first',
         creative: 'image', lp: 'none', specialCategory: 'none',
-        memo: '2ヶ月20万円のダイエットコース。無料体験に来た人の約3割が入会する。申し込みはInstagramのDMで受けている。'
+        memo: '2ヶ月20万円のダイエットコース。無料体験に来た人の約3割が入会する。申し込みはInstagramのDMで受けている。',
+        menus: [{ name: '2ヶ月ダイエットコース（食事指導つき）', price: 200000 }, { name: '無料体験（60分）', price: 0 }],
+        notOffered: '24時間の自由利用、グループレッスン', strengths: '女性トレーナーが担当。食事指導つき。完全個室。',
+        location: '横浜駅 西口から徒歩5分', booking: 'InstagramのDMで予約。当日の体験は空きがあれば対応。',
+        painPoints: '自己流のダイエットが続かない30〜40代の女性。結婚式・夏までにやせたい。',
+        competitors: '大手パーソナルジム、24時間ジム'
       }
     },
     {
@@ -244,7 +265,12 @@ window.SIM_CASES = {
         goal: 'inquiry', cvType: 'lead', salesTarget: 350000, price: 70000, closeRate: 25, margin: 80, budget: 200000,
         measurement: 'full', monthlyCv: '10', history: 'bad',
         creative: 'video', lp: 'dedicated', specialCategory: 'housing',
-        memo: '春の引っ越しシーズンに向けて、学生・新社会人向けの1K物件を中心に問い合わせを増やしたい。仲介手数料は家賃1ヶ月分（平均7万円）。問い合わせの約4件に1件が契約になる。'
+        memo: '春の引っ越しシーズンに向けて、学生・新社会人向けの1K物件を中心に問い合わせを増やしたい。仲介手数料は家賃1ヶ月分（平均7万円）。問い合わせの約4件に1件が契約になる。',
+        menus: [{ name: '賃貸の仲介（仲介手数料・家賃1ヶ月分）', price: 70000 }],
+        notOffered: '売買の仲介、物件の買取・査定', strengths: '学生・新社会人向けの1K物件が多い。オンライン内見に対応。',
+        location: '天神駅から徒歩5分', booking: 'WEBの問い合わせフォーム・電話。当日の内見も空きがあれば対応。',
+        painPoints: '春からの進学・就職で一人暮らしを始める。初期費用をおさえたい。',
+        competitors: '大手の賃貸仲介チェーン'
       }
     }
   ],
@@ -408,6 +434,7 @@ window.SIM_CASES = {
     ]
   },
   headlineMax: 3,
+  descriptionMax: 2, // 説明文（AIから広告文を取り込んだときだけ選ぶ）
 
   /* =========================================================
      段階4：検索語句レポートに出る語句
@@ -528,33 +555,6 @@ window.SIM_CASES = {
     }
   },
 
-  /* =========================================================
-     キーワード候補の作り方：AIの回答を取り込む
-     aiPrompt : 「AI用にコピー」でカルテの前に付ける指示文
-     ========================================================= */
-  aiPrompt: `あなたはGoogle検索広告の運用担当者です。下の「案件カルテ」の案件で使う、Google検索広告のキーワード候補を作ってください。
-
-# 作ってほしいもの
-1. キーワード候補を15〜20個
-   - 広告の練習に使うので、良い候補・普通の候補・悪い候補をわざと混ぜてください
-   - 強：今すぐ申し込み・購入・来店しそうな人の検索（例：地域名＋業種、〇〇 予約）
-   - 中：比べている・検討中の人の検索（例：〇〇 料金、〇〇 口コミ）
-   - 弱：調べているだけで、成果につながりにくい検索（例：〇〇 とは、〇〇 自分で）
-2. 除外キーワード候補を3〜5個
-   - 求人・自分でやる方法など、お客さんにならない人の検索に出ないようにする単語や語句
-   - 検索意図の強さは「除外」にしてください
-3. 想定クリック単価（円）と想定月間検索数（回）は、カルテの商圏での目安を整数で入れてください
-
-# 返し方（必ず守ること）
-- 下のJSON形式だけで返してください。前後に説明文を付けないでください
-- 「検索意図の強さ」は「強」「中」「弱」「除外」のどれか1つ
-- 除外の候補は、想定クリック単価と想定月間検索数を0にしてください
-- 「理由」は、その強さにした理由と、使うときの注意を1〜2文で
-
-{"keywords":[
-  {"キーワード":"（キーワード）","検索意図の強さ":"強","想定クリック単価":300,"想定月間検索数":1000,"理由":"（理由）"},
-  {"キーワード":"（除外キーワード）","検索意図の強さ":"除外","想定クリック単価":0,"想定月間検索数":0,"理由":"（理由）"}
-]}`,
 
   /* =========================================================
      段階2：オーディエンス設定（Meta）
