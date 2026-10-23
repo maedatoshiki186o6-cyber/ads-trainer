@@ -102,6 +102,7 @@
     // AIのパネルの状態（コピーしたか・貼り付け途中の文章・取り込みの結果）
     aiFlow: { kw: { copied: false, draft: '', msg: null }, ad: { copied: false, draft: '', msg: null }, terms: { copied: false, draft: '', msg: null } },
     saved: null,      // ブラウザに保存されている前回の続き（カルテ画面から再開できる）
+    matchHelp: null,  // マッチタイプの違い（説明）を開いているキーワードの番号
     dirty: false
   };
 
@@ -614,6 +615,7 @@
       meta: {}
     };
     setAds(st.adSource || 'auto');
+    st.matchHelp = null;
   }
   // 広告文の候補（見出し hls・説明文 descs）を作り方に合わせて入れ替える。選択はリセット
   function setAds(adSource) {
@@ -1232,9 +1234,10 @@
       <div class="kw-top"><span class="kw-text">${esc(text)}</span>
         <span class="seg" role="group" aria-label="${esc(text)}の扱い">${['add', 'negative', 'skip'].map(a => `<button type="button" class="seg-btn seg-${a} ${sel.act === a ? 'on' : ''}" aria-pressed="${sel.act === a}" data-action="sim-kw" data-i="${i}" data-val="${a}">${ACT_LABEL[a]}</button>`).join('')}</span></div>
       <div class="sim-kwmeta">${meta}</div>
-      ${sel.act === 'add' ? `<div class="sim-match sim-match-cards">
-        <p class="sim-match-label">マッチタイプ：${sel.match ? `<code class="sim-mcode">${esc(MATCH_CODE[sel.match](text))}</code>` : '<span class="sim-req">選んでください</span>'}</p>
-        ${renderMatchCards(c, i)}</div>` : ''}
+      ${sel.act === 'add' ? `<div class="sim-match"><span class="seg" role="group" aria-label="マッチタイプ">${Object.keys(B.match).map(m => `<button type="button" class="seg-btn ${sel.match === m ? 'on seg-add' : ''}" aria-pressed="${sel.match === m}" data-action="sim-match" data-i="${i}" data-val="${m}">${esc(B.match[m].label)}</button>`).join('')}</span>
+        ${sel.match ? `<code class="sim-mcode">${esc(MATCH_CODE[sel.match](text))}</code>` : '<span class="sim-req">マッチタイプを選んでください</span>'}
+        <button type="button" class="btn-ghost sm sim-mhelp-btn" data-action="sim-match-help" data-i="${i}" aria-expanded="${st.matchHelp === i}">${st.matchHelp === i ? '× 閉じる' : '？ 違いを見る'}</button>
+        ${st.matchHelp === i ? renderMatchCards(c, i) : ''}</div>` : ''}
     </li>`;
   }
 
@@ -2768,6 +2771,12 @@
         st.setup.kw[Number(t.dataset.i)].match = t.dataset.val;
         renderKeep();
         break;
+      case 'sim-match-help': {
+        const i = Number(t.dataset.i);
+        st.matchHelp = st.matchHelp === i ? null : i;
+        renderKeep();
+        break;
+      }
       case 'sim-neg-add': addNegative(); break;
       case 'sim-neg-remove':
         st.setup.customNeg.splice(Number(t.dataset.i), 1);

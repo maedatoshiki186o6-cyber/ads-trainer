@@ -778,9 +778,8 @@
   .sim-kwm b { color: var(--text); font-weight: 500; }
   .sim-kwm b.sim-int-high { color: var(--good); } .sim-kwm b.sim-int-low { color: var(--bad); }
   /* マッチタイプの選択肢（意味・例・こんなとき） */
-  .sim-match-cards { display: block; }
-  .sim-match-label { margin: 0 0 6px; font-size: 13px; }
-  .sim-mcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .sim-mhelp-btn { margin-left: auto; }
+  .sim-mcards { flex-basis: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .sim-mcard { display: grid; gap: 4px; align-content: start; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; }
   .sim-mcard:hover { border-color: var(--good); }
   .sim-mcard.on { border: 2px solid var(--good); background: var(--good-soft); padding: 9px 11px; }
