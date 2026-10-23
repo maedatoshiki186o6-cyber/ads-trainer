@@ -1226,18 +1226,19 @@
   }
 
   function renderKwRow(c, i, scale) {
-    const sel = st.setup.kw[i], text = fill(c.kw);
+    const sel = st.setup.kw[i], text = fill(c.kw), help = st.matchHelp === i;
     const meta = isTermKw(c)
       ? '<span class="sim-kwm">除外キーワードの候補になる単語</span>'
       : `<span class="sim-kwm">意図 <b class="sim-int-${c.intent}">${esc(B.intent[c.intent].label)}</b></span><span class="sim-kwm">想定CPC <b>${yen(c.cpc)}</b></span><span class="sim-kwm">検索数 <b>月${fmt(c.volume * scale)}回</b></span>`;
     return `<li class="kw-row" id="sim-kw-${i}">
       <div class="kw-top"><span class="kw-text">${esc(text)}</span>
-        <span class="seg" role="group" aria-label="${esc(text)}の扱い">${['add', 'negative', 'skip'].map(a => `<button type="button" class="seg-btn seg-${a} ${sel.act === a ? 'on' : ''}" aria-pressed="${sel.act === a}" data-action="sim-kw" data-i="${i}" data-val="${a}">${ACT_LABEL[a]}</button>`).join('')}</span></div>
+        <span class="seg" role="group" aria-label="${esc(text)}の扱い">${['add', 'negative', 'skip'].map(a => `<button type="button" class="seg-btn seg-${a} ${sel.act === a ? 'on' : ''}" aria-pressed="${sel.act === a}" data-action="sim-kw" data-i="${i}" data-val="${a}">${ACT_LABEL[a]}</button>`).join('')}</span>
+        <button type="button" class="btn-ghost sm sim-mhelp-btn" data-action="sim-match-help" data-i="${i}" aria-expanded="${help}">${help ? '× 閉じる' : '？ 違いを見る'}</button></div>
       <div class="sim-kwmeta">${meta}</div>
+      ${help ? renderActCards(c, i) : ''}
       ${sel.act === 'add' ? `<div class="sim-match"><span class="seg" role="group" aria-label="マッチタイプ">${Object.keys(B.match).map(m => `<button type="button" class="seg-btn ${sel.match === m ? 'on seg-add' : ''}" aria-pressed="${sel.match === m}" data-action="sim-match" data-i="${i}" data-val="${m}">${esc(B.match[m].label)}</button>`).join('')}</span>
         ${sel.match ? `<code class="sim-mcode">${esc(MATCH_CODE[sel.match](text))}</code>` : '<span class="sim-req">マッチタイプを選んでください</span>'}
-        <button type="button" class="btn-ghost sm sim-mhelp-btn" data-action="sim-match-help" data-i="${i}" aria-expanded="${st.matchHelp === i}">${st.matchHelp === i ? '× 閉じる' : '？ 違いを見る'}</button>
-        ${st.matchHelp === i ? renderMatchCards(c, i) : ''}</div>` : ''}
+        ${help ? `<p class="sim-mhelp-title">マッチタイプの違い</p>${renderMatchCards(c, i)}` : ''}</div>` : ''}
     </li>`;
   }
 
@@ -1265,6 +1266,25 @@
       phrase: `${plus.map(quoteJa).join('')}にも出る`,
       broad: relQ.length ? `${relQ.map(quoteJa).join('')}にも出ることがある` : '言葉が違っても、関連しそうな検索にも出ることがある'
     };
+  }
+  // 使う・除外・使わない の説明（例はキーワードに合わせて作る）
+  function renderActCards(c, i) {
+    const sel = st.setup.kw[i], text = fill(c.kw);
+    const base = kwList().filter(x => !isTermKw(x) && x.ans === 'add').map(x => fill(x.kw))[0] || `${areaWord()} ${tplWords().main}`;
+    // 除外の例：単語（求人など）なら「本命のキーワード＋その単語」、キーワードなら「そのキーワード＋言葉」
+    const negQ = isTermKw(c) && !base.includes(text) ? `${base} ${text}` : `${text} ${['安い', 'おすすめ', '口コミ'].find(w => !text.includes(w))}`;
+    const help = {
+      add:      { mean: 'このキーワードで検索した人に広告を出す', ex: isTermKw(c) ? `「${text}」だけで検索した人に広告が出る（ふつうは使わない言葉）` : `「${text}」と検索した人に広告が出る。どこまで広く出すかは、下のマッチタイプで決める`, when: 'お客さんになりそうな人が検索する言葉' },
+      negative: { mean: 'この言葉が入った検索には、広告を出さない', ex: `「${text}」を除外すると、「${negQ}」のような検索にも広告が出なくなる`, when: '求人・自分でやる方法・無料など、お客さんにならない人の検索' },
+      skip:     { mean: '登録しない。広告を出すことも、止めることもしない', ex: `「${text}」は登録しないが、ほかのキーワードがフレーズ一致・部分一致なら、似た検索に広告が出ることはある`, when: '関係はあるけれど成果につながりにくい、またはお金をかけるほどではない言葉' }
+    };
+    return `<div class="sim-mcards sim-actcards" role="group" aria-label="${esc(text)}の扱い">${['add', 'negative', 'skip'].map(a => `
+      <button type="button" class="sim-mcard ${sel.act === a ? 'on' : ''}" aria-pressed="${sel.act === a}" data-action="sim-kw" data-i="${i}" data-val="${a}">
+        <span class="sim-mcard-title">${esc(ACT_LABEL[a])}</span>
+        <span><b>意味</b>${esc(help[a].mean)}</span>
+        <span><b>例</b>${esc(help[a].ex)}</span>
+        <span><b>こんなとき</b>${esc(help[a].when)}</span>
+      </button>`).join('')}</div>`;
   }
   function renderMatchCards(c, i) {
     const sel = st.setup.kw[i], ex = matchExamples(c);

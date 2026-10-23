@@ -778,7 +778,9 @@
   .sim-kwm b { color: var(--text); font-weight: 500; }
   .sim-kwm b.sim-int-high { color: var(--good); } .sim-kwm b.sim-int-low { color: var(--bad); }
   /* マッチタイプの選択肢（意味・例・こんなとき） */
-  .sim-mhelp-btn { margin-left: auto; }
+  .sim-mhelp-btn { white-space: nowrap; }
+  .sim-actcards { margin: 8px 0 0; }
+  .sim-mhelp-title { flex-basis: 100%; margin: 4px 0 0; font-size: 13px; font-weight: 600; }
   .sim-mcards { flex-basis: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .sim-mcard { display: grid; gap: 4px; align-content: start; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; }
   .sim-mcard:hover { border-color: var(--good); }
