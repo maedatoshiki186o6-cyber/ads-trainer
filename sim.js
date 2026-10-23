@@ -623,7 +623,8 @@
     const toAd = x => ({ text: x.text, quality: x.quality, themes: [], kws: x.kws, ai: true, reason: `${x.reason || '（AIの理由なし）'}（AIの評価：${AD_RATING[x.quality]}）` });
     st.adSource = s.adSource = adSource;
     s.adAt = ai ? st.ai.ad.at : null;
-    s.hls = adSource === 'ai' ? (ai ? st.ai.ad.items.filter(x => x.kind === 'headline').map(toAd) : []) : (C.headlines[st.karte.industry] || C.commonHeadlines);
+    const own = (s.hls || []).filter(h => h.own); // 自分で追加した見出しは、作り方を変えても残す
+    s.hls = [...(adSource === 'ai' ? (ai ? st.ai.ad.items.filter(x => x.kind === 'headline').map(toAd) : []) : (C.headlines[st.karte.industry] || C.commonHeadlines)), ...own];
     s.descs = ai ? st.ai.ad.items.filter(x => x.kind === 'description').map(toAd) : [];
     s.headlines = [];
     s.descriptions = [];
@@ -1082,13 +1083,14 @@
   // 広告文がキーワードに合っているか。用意した見出しはテーマで、AIの文は「合うキーワード」と文中の言葉で判定する
   const normSp = t => String(t).replace(/[\s　]+/g, ' ').trim();
   function adMatches(h, c) {
-    if (!h.ai) return h.themes.includes(c.theme);
+    if (!h.ai && !h.own) return h.themes.includes(c.theme);
     const t = normSp(fill(c.kw));
     if ((h.kws || []).some(k => normSp(fill(k)) === t)) return true;
     const toks = t.split(' ').filter(x => x && x !== areaWord());
     if (!toks.length) return false;
     const text = fill(h.text);
-    return toks.filter(x => text.includes(x)).length >= Math.ceil(toks.length / 2);
+    // 地域名以外の言葉が2つまでなら全部、3つ以上なら1つ欠けまで入っていれば「合う」
+    return toks.filter(x => text.includes(x)).length >= (toks.length <= 2 ? toks.length : toks.length - 1);
   }
   function kwQuality(c) {
     const hs = adItems();
@@ -1297,17 +1299,63 @@
       </button>`).join('')}</div>`;
   }
 
+  /* ---------- 自分で追加する見出し ----------
+   * 品質は、使うキーワードの言葉が入っているか（adMatches）で決まる。根拠を示せない表現が入っていたら「違反」
+   */
+  const NG_WORDS = ['絶対', '必ず', '日本一', '世界一', 'no.1', 'no1', 'ナンバーワン', '業界一', '業界初', '最安', '最高', '100%', '誰でも', '確実', '完璧'];
+  const ngOf = text => NG_WORDS.filter(w => toHalf(text).toLowerCase().includes(w));
+  function ownHeadline(text) {
+    const ng = ngOf(text);
+    return { text, quality: ng.length ? 'violation' : 'high', themes: [], kws: [], own: true, ng };
+  }
+  // 自作の見出しの解説（採点・入力欄の下に出す）
+  function ownReason(h, s = st.setup) {
+    if (h.ng && h.ng.length) return `「${h.ng.join('」「')}」は、根拠を示せない言い切り・最上級の表現で、景品表示法や業界のルールに反するおそれがあります。審査で広告が止まる原因になります。`;
+    const hits = s.kw.map((x, i) => ({ x, c: s.cands[i] })).filter(({ x, c }) => x.act === 'add' && !isTermKw(c) && adMatches(h, c)).map(({ c }) => fill(c.kw));
+    return hits.length ? `使うキーワード「${hits.join('」「')}」の言葉が入っているので、そのキーワードの品質が上がります。`
+      : '使うキーワードの言葉が入っていないので、この見出しだけでは品質は「ふつう」です。キーワードの言葉を入れてみましょう。';
+  }
+  function addHeadline(mode) {
+    const input = $(`#sim-hl-text-${mode}`), err = $(`#sim-hl-err-${mode}`);
+    const text = normSp(input.value), s = mode === 'ops' ? st.ops.draft.setup : st.setup;
+    const fail = msg => { err.textContent = msg; err.hidden = false; input.focus(); };
+    if (!text) return fail('見出しを入力してください。');
+    if (widthOf(text) > AD_LIMIT.headline) return fail(`長すぎます（全角${Math.ceil(widthOf(text) / 2)}文字）。Googleの見出しは全角15文字（半角30文字）までです。`);
+    if (s.hls.some(h => fill(h.text) === text)) return fail('同じ見出しがすでにあります。');
+    s.hls.push(ownHeadline(text));
+    if (s.headlines.length < C.headlineMax) s.headlines.push(s.hls.length - 1);
+    st.dirty = true;
+    renderKeep();
+    const next = $(`#sim-hl-text-${mode}`);
+    if (next) next.focus();
+  }
+  // 自作の見出しを消す（設定の画面だけ。番号がずれるので、選んでいる見出しの番号も直す）
+  function removeHeadline(j) {
+    const s = st.setup;
+    s.hls.splice(j, 1);
+    s.headlines = s.headlines.filter(x => x !== j).map(x => x > j ? x - 1 : x);
+    renderKeep();
+  }
+
   // 見出し・説明文のチェックボックス（設定の画面：mode='setup'／運用改善：mode='ops'）
   function renderAdPicks(s, mode) {
-    if (!s.hls.length) return '<p class="sim-hint" id="sim-hl-list">AIの回答を取り込むと、ここに見出しと説明文の候補が出ます。</p>';
+    const form = `<div class="ckw sim-hl-own">
+        <h4>見出しを自分で追加 <small>（全角15文字・半角30文字まで）</small></h4>
+        <div class="ckw-form"><input type="text" id="sim-hl-text-${mode}" class="sim-text" data-hlmode="${mode}" placeholder="例：${esc(areaWord())}駅すぐの${esc(tplWords().main)}｜WEB予約OK" aria-label="追加する見出し"><button type="button" class="btn-ghost" data-action="sim-hl-add" data-mode="${mode}">追加</button></div>
+        <p class="sim-alert bad" id="sim-hl-err-${mode}" role="alert" hidden></p>
+        <p class="sim-hint">使うキーワードの言葉を入れると品質が上がります。「絶対」「日本一」など根拠のない表現は、審査で止まる原因になります。</p>
+      </div>`;
+    if (!s.hls.length) return `<p class="sim-hint" id="sim-hl-list">AIの回答を取り込むと、ここに見出しと説明文の候補が出ます。自分で見出しを追加することもできます。</p>${form}`;
     const box = (list, sel, max, attr, kind) => `<div class="opts multi">${list.map((h, i) => {
-      const text = fill(h.text), over = h.ai && widthOf(text) > AD_LIMIT[kind];
+      const text = fill(h.text), over = (h.ai || h.own) && widthOf(text) > AD_LIMIT[kind];
       const at = mode === 'ops' ? `data-opsf="${attr}"` : `data-${attr}="${i}"`;
-      return `<label class="opt"><input type="checkbox" value="${i}" ${at} ${sel.includes(i) ? 'checked' : ''} ${!sel.includes(i) && sel.length >= max ? 'disabled' : ''}>
-        <span class="opt-main"><span class="opt-label">${esc(text)}</span>${h.ai ? `<span class="opt-desc${over ? ' sim-warn' : ''}">全角${Math.ceil(widthOf(text) / 2)}文字${over ? `（上限の${AD_LIMIT[kind] / 2}文字を超えています）` : ''}</span>` : ''}</span></label>`;
+      const del = h.own && mode === 'setup' ? `<button type="button" class="x" data-action="sim-hl-remove" data-i="${i}" aria-label="${esc(text)}を削除">×</button>` : '';
+      return `<label class="opt ${h.own ? 'sim-own' : ''}"><input type="checkbox" value="${i}" ${at} ${sel.includes(i) ? 'checked' : ''} ${!sel.includes(i) && sel.length >= max ? 'disabled' : ''}>
+        <span class="opt-main"><span class="opt-label">${h.own ? '<span class="tag">自作</span> ' : ''}${esc(text)}</span>${h.ai || h.own ? `<span class="opt-desc${over ? ' sim-warn' : ''}">全角${Math.ceil(widthOf(text) / 2)}文字${over ? `（上限の${AD_LIMIT[kind] / 2}文字を超えています）` : ''}</span>` : ''}${h.own && h.ng.length ? `<span class="opt-desc sim-warn">⚠️ 「${esc(h.ng.join('」「'))}」は審査で止まるおそれがあります</span>` : ''}</span>${del}</label>`;
     }).join('')}</div>`;
     return `<h4 class="sim-adhead" id="sim-hl-list">見出し <small class="sim-hint">（最大${C.headlineMax}つ・${s.headlines.length}/${C.headlineMax}）</small></h4>
       ${box(s.hls, s.headlines, C.headlineMax, 'hl', 'headline')}
+      ${form}
       ${s.descs.length ? `<h4 class="sim-adhead">説明文 <small class="sim-hint">（最大${C.descriptionMax}つ・${s.descriptions.length}/${C.descriptionMax}）</small></h4>
       ${box(s.descs, s.descriptions, C.descriptionMax, 'ds', 'description')}` : ''}`;
   }
@@ -1413,7 +1461,7 @@
   }
 
   function gradeHeadlines() {
-    if (st.setup.adSource === 'ai') return gradeAiAds();
+    if (st.setup.adSource === 'ai' || adItems().some(h => h.own)) return gradeAiAds();
     const hs = st.setup.headlines.map(i => hlList()[i]);
     const themes = [...new Set(addedIdx().map(i => kwList()[i].theme).filter(Boolean))];
     const covered = themes.filter(t => hs.some(h => h.quality === 'high' && h.themes.includes(t)));
@@ -1438,10 +1486,11 @@
     const level = vio.length ? 'bad' : !adds.length ? 'ok'
       : covered.length === adds.length ? 'good' : covered.length >= adds.length / 2 ? 'ok' : 'bad';
     const kindOf = h => s.descs.includes(h) ? '説明文' : '見出し';
-    const lines = hs.map(h => `・【${kindOf(h)}】${fill(h.text)}：${h.reason}`);
+    const lines = hs.map(h => `・【${kindOf(h)}${h.own ? '・自作' : ''}】${fill(h.text)}：${h.own ? ownReason(h) : h.reason}`);
     if (miss.length) lines.push(`使うキーワードのうち「${miss.map(c => fill(c.kw)).join('」「')}」に合う見出し・説明文がありません。そのキーワードは品質が下がり、クリック単価が上がります。`);
     if (vio.length) lines.push('問題のある表現を含む文があるため、すべてのキーワードで品質が1段階下がる計算にしています。');
-    lines.push('AIが付けた評価（良い・普通・違反）と、文中の言葉・「合うキーワード」をもとに採点しています。AIの評価が正しいとは限らないので、自分でも考えてみましょう。');
+    if (st.setup.adSource === 'ai') lines.push('AIが付けた評価（良い・普通・違反）と、文中の言葉・「合うキーワード」をもとに採点しています。AIの評価が正しいとは限らないので、自分でも考えてみましょう。');
+    if (hs.some(h => h.own)) lines.push('自作の見出しは、使うキーワードの言葉が入っているか、根拠のない表現がないかで採点しています。');
     const best = [...s.hls, ...s.descs].filter(h => h.quality === 'high' && adds.some(c => adMatches(h, c)));
     return { title: s.descs.length ? '広告文（見出し・説明文）' : '広告見出し', level, choice: hs.map(h => fill(h.text)).join('／'),
       best: best.map(h => fill(h.text)).join('／') || '使うキーワードの言葉が入った、評価「良い」の文', reason: lines.join('\n') };
@@ -2678,6 +2727,10 @@
   window.addEventListener('pagehide', saveNow);
 
   view.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.dataset.hlmode && !e.isComposing) {
+      e.preventDefault();
+      addHeadline(e.target.dataset.hlmode);
+    }
     if (e.key === 'Enter' && e.target.id === 'sim-neg-text' && !e.isComposing) {
       e.preventDefault();
       addNegative();
@@ -2791,6 +2844,8 @@
         st.setup.kw[Number(t.dataset.i)].match = t.dataset.val;
         renderKeep();
         break;
+      case 'sim-hl-add': addHeadline(t.dataset.mode); break;
+      case 'sim-hl-remove': e.preventDefault(); removeHeadline(Number(t.dataset.i)); break;
       case 'sim-match-help': {
         const i = Number(t.dataset.i);
         st.matchHelp = st.matchHelp === i ? null : i;
